@@ -1,0 +1,26 @@
+[
+  {
+    "command": "kuf",
+    "type": "Walk",
+    "explain_en": "walk forward",
+    "explain_ko": "앞으로 걷기",
+    "sample_sentence_en": "Walk forward buddy.",
+    "sample_sentence_ko": "앞으로 걸어봐 친구야."
+  },
+  {
+    "command": "ksit",
+    "type": "Posture",
+    "explain_en": "sit down",
+    "explain_ko": "앉기", 
+    "sample_sentence_en": "Sit down.",
+    "sample_sentence_ko": "앉아."
+  },
+  {
+    "command": "kup",
+    "type": "Posture",
+    "explain_en": "stand up",
+    "explain_ko": "일어서기",
+    "sample_sentence_en": "Stand up.",
+    "sample_sentence_ko": "일어나."
+  }
+]
