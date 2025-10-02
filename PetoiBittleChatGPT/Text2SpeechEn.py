@@ -54,7 +54,7 @@ from pydub.playback import play
 
 def text_to_speech_stream(text):
     async def _run():
-        voice = "en-US-AriaNeural"   # 원하는 음성 선택
+        voice = "ko-KR-AriyaNeural"   # 한국어 음성
         output_file = "output.mp3"
 
         # 텍스트를 음성으로 변환해서 파일 저장

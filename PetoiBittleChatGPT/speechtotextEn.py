@@ -16,7 +16,7 @@ def listen_and_transcribe():
 
     try:
         # Google'ın ses tanıma API'si ile sesi metne çevir
-        text = recognizer.recognize_google(audio, language='en-EN')
+        text = recognizer.recognize_google(audio, language='ko-KR')
         return text
     except sr.UnknownValueError:
         text="Sory I could not understand audio."

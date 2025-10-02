@@ -79,21 +79,45 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
 - ChatPromptTemplate 객체
 '''
 def build_prompt() -> ChatPromptTemplate:
+    '''
+    함수 설명
+    - 시스템 프롬프트에 명령 세트와 해석 규칙을 고정
+    - 대답 한 줄 + "The relevant command is: ##<code>##" 형식 강제
+    입력값
+    - 없음
+    출력값
+    - ChatPromptTemplate 객체
+    '''
+    # 한 줄 한 줄 주석으로 설명
+    # system_text: 모델이 반드시 따를 규칙과 허용 명령어를 명시
     system_text = (
+        # 캐릭터/역할
         "You are Bittle, a robot dog.\n"
         "User talks casually; you reply in a friendly short sentence PLUS one control command.\n"
-        "Choose exactly one command from the given JSON command set.\n"
+        # 허용 명령: 여기만 수정 — kup/ksit/kuf/none 4가지만 선택하도록 명시
+        "Choose exactly one command from this set: kup, ksit, kuf, none.\n"
+        # 해석 규칙(한국어/영어 트리거어)
+        "Interpretation rules:\n"
+        "- kup: when user asks '일어나, 일어서, stand, get up' (stand up / raise body).\n"
+        "- ksit: when user asks '앉아, 앉기, sit, seat yourself' (sit down / lower hips).\n"
+        "- kuf: when user asks '앞으로 와, 이리 와, 와봐, come, walk here, move forward'.\n"
+        "- none: anything else (chit-chat, unsupported tricks like kneel/roll/jump, ambiguous asks).\n"
+        # 출력 형식 고정
         "Output format MUST be exactly two parts in one line:\n"
         "1) a short chat reply to the user (any style)\n"
         "2) the command line: The relevant command is: ##<command_code>##\n"
+        # 제약사항
         "Never output additional '#' or backticks. Never invent commands outside the set.\n"
+        # 외부 JSON 명령표(참고용): {commands_json}는 partial로 대체됨
         "Command set (JSON):\n"
         "```json\n{commands_json}\n```"
     )
+
+    # ChatPromptTemplate 생성: system 한 장 + 대화 메시지 자리
     return ChatPromptTemplate.from_messages(
         [
-            ("system", system_text),
-            MessagesPlaceholder(variable_name="messages"),
+            ("system", system_text),                         # 시스템 규칙
+            MessagesPlaceholder(variable_name="messages"),   # 대화 히스토리 주입
         ]
     )
 
