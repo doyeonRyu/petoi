@@ -24,3 +24,4 @@ pyUI/README_Windows.txt
 serialMaster/logfile.log
 .cursor/*
 PetoiBittleChatGPT/__pycache__/*
+PetoiBittleChatGPT/.env
