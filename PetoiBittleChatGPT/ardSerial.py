@@ -13,17 +13,18 @@ import os
 import config
 import glob
 
+# 로깅 설정
 FORMAT = '%(asctime)-15s %(name)s - %(levelname)s - %(message)s'
 '''
-Level: The level determines the minimum priority level of messages to log. 
-Messages will be logged in order of increasing severity: 
-DEBUG is the least threatening, 
-INFO is also not very threatening, 
-WARNING needs attention, 
-ERROR needs immediate attention, 
-and CRITICAL means “drop everything and find out what’s wrong.” 
-The default starting point is INFO, 
-which means that the logging module will automatically filter out any DEBUG messages.
+레벨: 레벨은 기록할 메시지의 최소 우선순위 레벨을 결정합니다. 
+메시지는 심각도가 증가하는 순서대로 기록됩니다: 
+DEBUG는 가장 위협적이지 않습니다, 
+정보도 그다지 위협적이지 않습니다, 
+경고는 주의가 필요합니다, 
+오류는 즉각적인 주의가 필요합니다, 
+그리고 Critical은 "모든 것을 버리고 무엇이 잘못되었는지 알아보세요"라는 뜻입니다 
+기본 시작 지점은 INFO입니다, 
+즉, 로깅 모듈은 모든 DEBUG 메시지를 자동으로 필터링합니다.
 '''
 # logging.basicConfig(level=logging.DEBUG, format=FORMAT)
 logging.basicConfig(filename='./logfile.log', filemode='a+', level=logging.INFO, format=FORMAT)
@@ -62,6 +63,16 @@ def encode(in_str, encoding='utf-8'):
 
 delayBetweenSlice = 0.001
 
+"""
+Function: serialWriteNumToByte
+    - 시리얼 포트에 숫자 데이터를 바이트 형식으로 전송
+Parameters:
+    - port: SerialCommunication 객체
+    - token: 명령어 토큰 (문자열)
+    - var: 전송할 숫자 데이터 리스트 (기본값: None)
+Returns:
+    - None
+"""
 def serialWriteNumToByte(port, token, var=None):  # Only to be used for c m u b I K L o within Python
     # print("Num Token "); print(token);print(" var ");print(var);print("\n\n");
     logger.debug(f'serialWriteNumToByte, token={token}, var={var}')

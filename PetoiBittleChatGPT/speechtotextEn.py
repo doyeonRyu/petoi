@@ -2,20 +2,18 @@ import speech_recognition as sr
 from Text2SpeechEn import text_to_speech_stream
 
 def listen_and_transcribe():
-    # Recognizer ve mikrofonu başlat
-    recognizer = sr.Recognizer()
-    microphone = sr.Microphone()
+    recognizer = sr.Recognizer() # Recognizer 객체 생성
+    microphone = sr.Microphone() # Microphone 객체 생성
 
-    # Mikrofondan ses almak için ayarlamalar yap
+    # 마이크로부터 오디오 캡처
     with microphone as source:
         print("Talk...")
-        #recognizer.adjust_for_ambient_noise(source)
-       # audio = recognizer.listen(source)
+        # 마이크로부터 오디오 캡처
         recognizer.adjust_for_ambient_noise(source)
-        audio = recognizer.listen(source )
+        audio = recognizer.listen(source)
 
     try:
-        # Google'ın ses tanıma API'si ile sesi metne çevir
+        # Google의 음성 인식 API를 사용하여 음성을 텍스트로 변환
         text = recognizer.recognize_google(audio, language='ko-KR')
         return text
     except sr.UnknownValueError:
