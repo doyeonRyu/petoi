@@ -1,7 +1,7 @@
 """
 ==============================================================================
 Project: 페토이 기본 코드 정리; 랭체인 기반 Petoi GPT
-File: PetoiGPT_with_langChain.py
+File: 13_PetoiGPT_with_langChain.py
 Summary: 랭체인을 통한 대화 이력 관리 및 GPT 모델 연동 Petoi 구현
 Author: 유도연
 Created Date: 2025-10-27
