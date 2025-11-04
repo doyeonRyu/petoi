@@ -53,7 +53,8 @@ Limitations:
     - 현재 개발 과정이므로 STT, TTS, 실제 Petoi 동작은 구현하지 않음 (수정 필요)
     - py 파일 실행시 commands.json 파일의 내용을 전부 gpt한테 입력 -> 토큰 사용량 큼
         -> 한 번만 추가하고 이후에 대화 반복으로 코드 변경함
-    - 사용자 프로필만 저장하고 있음. 사용자 대화도 저장 필요 (메모리 관리 필요)
+    - json 파일로 대화 저장하지만, 실제 대화에서는 이전 대화를 참고하지 않고 프로필만 참고함
+    - 메모리, 토큰 관리 필요
 
 ==============================================================================
 """
@@ -76,6 +77,7 @@ from langchain_core.chat_history import (
     BaseChatMessageHistory, # 기본 대화 기록
     InMemoryChatMessageHistory, # 메모리 기반 대화 기록
 )
+from langchain_community.chat_message_histories import FileChatMessageHistory # 대화 기록 json으로 저장 위함
 
 # 2) Petoi 관련 라이브러리 로드
 from PetoiRobot import * # Petoi 로봇 제어
@@ -96,7 +98,12 @@ import speech_recognition as sr # 음성 인식
 load_dotenv() # API 불러오기
 
 # 2) OpenAI GPT-4o-mini 모델 초기화
-model = ChatOpenAI(model="gpt-4o-mini")
+model = ChatOpenAI(
+    model="gpt-4o-mini",
+    temperature=0.7, # 낮을수록 일관성이 높고, 높을수록 창의적
+    max_tokens=200, # 응답 길이 제한
+    # top_p= 0.9 # nucleus sampling 범위; 확률 임계값
+)
 
 # 3) Petoi 포트 연결 # 우선 생략
 # autoConnect() # 자동 포트 연결 함수 호출
@@ -122,16 +129,24 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
         - 세션 ID에 해당하는 대화 기록이 없으면 새로 생성하여 반환
         - 기존에 있으면 해당 기록 반환
     """
+    
+    # logs 폴더 없으면 생성
+    os.makedirs("./logs", exist_ok=True)
+    
     # 세션이 store에 존재하지 않으면 새로 생성
     if session_id not in store:
-        store[session_id] = InMemoryChatMessageHistory() # 새로운 세션이면 새 이력 생성
+        # 메모리에 임시 저장
+        # store[session_id] = InMemoryChatMessageHistory() # 새로운 세션이면 새 이력 생성
+        # json에 영구 저장
+        store[session_id] = FileChatMessageHistory(f"./logs/{session_id}.json") 
         # print(f"[get_session_history 디버깅] 새로운 세션 생성: {session_id}")
     else: # 기존 세션이면 기존 세션 불러오기
-        # print(f"[get_session_history 디버깅] 기존 세션 불러오기: {session_id}")
         pass
 
-    # 세션에 해당하는 대화 이력 반환
-    # print("[get_seesion_history 디버깅] 세션에 해당하는 대화 이력 반환", store[session_id])
+    # 기존 세션이 InMemory면 강제로 FileChatMessageHistory로 교체
+    if session_id in store and not isinstance(store[session_id], FileChatMessageHistory):
+        store[session_id] = FileChatMessageHistory(f"./logs/{session_id}.json")
+
     return store[session_id] 
 
 # 2) 명령어 사전 정의 파일 불러오는 함수
@@ -231,7 +246,7 @@ def find_profile_by_name(profiles: list[dict], user_name: str) -> dict | None:
 # ============================================================================
 
 # 부팅(첫 실행) 절차: 인사 + 질문 (사용자 정보 저장을 위한)
-# 부팅 시 첫 실행 절차 진행 함수
+# 1. 부팅 시 첫 실행 절차 진행 함수
 def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
     """
     Function: run_boot_sequence
@@ -244,21 +259,7 @@ def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
     Returns:
         - profile (dict): 수집된 사용자 프로필 정보
     """
-
-    # 1) 인삿말 프롬프트(한 번만 실행)
-    greet_prompt = ChatPromptTemplate.from_messages([
-        ("system", "너는 Bittle이야. 밝고 귀엽게 인사만 해."),
-        ("human", "{user_input}")
-    ])
-
-    # 1-1) 부팅 체인 생성
-    greet_chain = greet_prompt | model | StrOutputParser()
-
-    # 1-2) 인삿말 생성 및 출력
-    greet = greet_chain.invoke({"user_input": "안녕 Bittle! 처음 시작했으니 인사해줘."})
-    print("[Bittle 부팅 시]", greet)
-
-    # 2) 사용자 프로필에 저장할 기본 질문 (추가 예정)
+    # 1) 사용자 프로필에 저장할 기본 질문 (추가 예정)
     #   - 정보 수집에 이용
     questions = [
         "너를 뭐라고 불러주면 좋겠어?",
@@ -267,17 +268,17 @@ def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
 
     profile = {} # 프로필 초기화
 
-    # 2-1) 기본 질문을 위한 프롬프트
+    # 1-1) 기본 질문을 위한 프롬프트
     chat_prompt = ChatPromptTemplate.from_messages([
         ("system", "너는 사용자의 초기 설정을 돕는 로봇 강아지 Bittle이야. 질문만 짧고 친근하게 해."),
         MessagesPlaceholder(variable_name="history"), # 과거 대화 이력 자리표시자
         ("human", "{user_input}")
     ])
 
-    # 2-2) 정보 수집 체인 생성
+    # 1-2) 정보 수집 체인 생성
     chat_chain = chat_prompt | model | StrOutputParser()
     
-    # 2-3) RunnableWithMessageHistory로 체인 래핑
+    # 1-3) RunnableWithMessageHistory로 체인 래핑
     chat_chain = RunnableWithMessageHistory(
         chat_chain,
         get_session_history,
@@ -285,7 +286,7 @@ def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
         history_messages_key="history"
     )
 
-    # 3) 실제 질의응답 
+    # 2) 실제 질의응답 
     #   - LangChain memory에 자동 기록
     for q in questions:
         # Bittle이 묻는 말도 memory에 기록됨
@@ -303,17 +304,27 @@ def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
         else:
             profile.setdefault("notes", []).append(answer)
 
-    # 4) 저장
-    # save_profiles(profile, profile_path) # 프로필에 새로운 사용자 저장
-    # print("[run_boot_sequence SYSTEM] 프로필이 저장되었습니다:", profile)
     return profile
 
+# 2. 인삿말 프롬프트
+def greet_command():
+    greet_prompt = ChatPromptTemplate.from_messages([
+        ("system", 
+            "너는 Bittle이야. 밝고 귀엽게 인사만 해. 이모티콘 같은 건 쓰지 말고 간결하게 인사해"),
+        ("human", "{user_input}")
+    ])
 
+    # 1) 부팅 체인 생성
+    greet_chain = greet_prompt | model | StrOutputParser()
+
+    # 2) 인삿말 생성 및 출력
+    greet = greet_chain.invoke({"user_input": "안녕 Bittle! 처음 시작했으니 인사해줘."})
+    return greet
 
 # ============================================================================
 # 6. 시스템 프롬프트 및 대화 체인 생성 함수
 # ============================================================================
-def build_chat_chain(model, get_session_history, session_id, profile=None):
+def build_chat_chain(model, get_session_history, session_id, config, command_content, profile=None):
     """
     Function: build_chat_chain
         - 시스템 프롬프트 정의 
@@ -355,14 +366,17 @@ def build_chat_chain(model, get_session_history, session_id, profile=None):
                 "   - 그냥 네가 아는 지식이나 대화로 한국어로 자연스럽게 답해. "
                 "   - 이 경우에는 절대 명령어를 출력하지 마. "
                 "즉, 로봇 명령일 때만 ##명령어##를 포함하고, 그 외에는 지식과 대화를 통해 답해야 해."
+                "Hi I am working on a programmable robot dog. I am developing a software to control this robot from remote. And also I want to chat with this dog. I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. The relevant command is:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
+                "Here is your command set:\n{command_content}\n\n"
                 f"{profile_text}"),
             MessagesPlaceholder(variable_name="history"), # 과거 대화 이력 자리표시자
             ("human", "{user_input}") # 현재 사용자 입력 자리
     ])
-    
+    filled_prompt = prompt.partial(command_content=command_content)
+
     # 3) 프롬프트 -> 모델 -> 문자열 파싱으로 이어지는 체인 구성
     # str 형태로 모델 응답 반환
-    chain = prompt | model | StrOutputParser()
+    chain = filled_prompt | model | StrOutputParser()
     
     # 4) sessionn_id가 store에 없다면 해당 세션용 대화 이력 저장소 생성
     if session_id not in store:
@@ -376,68 +390,34 @@ def build_chat_chain(model, get_session_history, session_id, profile=None):
         chain,
         get_session_history, # 외부에서 session_id 기반으로 히스토리 반환하는 콜백
         input_messages_key="user_input", # invoke 시 사용자 입력을 넣을 키
-        history_messages_key="history" # 과거 메시지들이 주입될 자리표시자 키
+        history_messages_key="history", # 과거 메시지들이 주입될 자리표시자 키
+        config=config
     )
     
     # 6) 최종적으로 히스토리, 사용자 프로필 연동이 포함된 체인 반환
     return with_message_history
 
 
-
 # ============================================================================
-# 7. 일반 대화 처리(명령 분리 출력)
-# ============================================================================
-
-# 대화 프로세스 구현 함수
-def initialize_chat(with_message_history, config, command_content):
-    """
-    Function: initialize_chat
-        - Bittle 초기 세션 설정 (1️⃣, 2️⃣ 단계만 실행)
-    """
-    # 1) 초기 컨텍스트 설정
-    user_input = ("Hi I am working on a programmable robot dog. I am developing a software to control this robot from remote. And also I want to chat with this dog. I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. The relevant command is:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
-                f"Here is your command set:\n{command_content}\n\n"
-    )
-    response = with_message_history.invoke(
-        {"user_input": user_input},
-        config=config,
-    )
-    print("[Bittle 초기 응답 1]", response)
-
-    # 2) 명령어 데이터셋 존재만 알림 (JSON 내용은 전달하지 않음)
-    user_input = (
-        "I have a command dataset loaded locally. "
-        "You don’t need to see it — the system will handle commands automatically."
-    )
-    response = with_message_history.invoke(
-        {"user_input": user_input},
-        config=config,
-    )
-    # print("[Bittle 초기 응답 2]", response)
-
-
-
-# ============================================================================
-# 8. main 함수 
+# 7. main 함수 
 # ============================================================================
 if __name__ == "__main__": # 모듈 단독 실행 시만 동작 
-    
     # 1) 명령어, 프로필 파일 불러오기
-    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\OpenCat\\PetoiBittleChatGPT\\Commands.json' 
+    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\페토이_기본_코드_정리\\Commands.json' 
     command_content = load_commands(command_path)
     
-    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\OpenCat\\PetoiBittleChatGPT\\bittle_profile.json" 
+    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\페토이_기본_코드_정리\\bittle_profile.json" 
     profiles = load_profiles(profile_path) 
 
-    # 2) 세션 구성
-    session_id = "bittle_session" # 부팅 + 대화 동일 세션에 저장되도록 구성
-    config = {"configurable": {"session_id": session_id}} 
-    
-    # 3) 처음 부팅 시 사용자 이름 - 프로필 매칭을 위한 과정
+    # 2) 처음 부팅 시 사용자 이름 - 프로필 매칭을 위한 과정
     print("안녕! 너 이름이 뭐야?\n") 
-    
     user_name = input("[사용자 이름] ").strip() 
     
+    # 3) 세션 구성
+    session_id = f"{user_name}_session" # 부팅 + 대화 동일 세션에 저장되도록 구성
+    config = {"configurable": {"session_id": session_id}} 
+    
+    # 4) 사용자 프로필 로드 혹은 생성
     # 사용자 이름과 프로필 매칭하기
     profile = find_profile_by_name(profiles, user_name) 
     
@@ -454,12 +434,16 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     else: print(f"[SYSTEM] 환영해, {user_name}! 기존 프로필을 불러왔어:\n{profile}") # 프로필 반영된 체인 재생성 (같은 세션 유지) 
     
     # 대화 체인에 프로필 정보 추가
-    chain = build_chat_chain(model, get_session_history, session_id, profile) 
+    chain = build_chat_chain(model, get_session_history, session_id, config, command_content, profile) 
     
-    # 4) 대화 시스템 작동
+    # 5) 대화 시스템 작동
     print("\n[SYSTEM] 대화를 시작합니다. '종료' 입력 시 종료됩니다.") 
-    # initialize_chat(chain, command_content, config)
-    initialize_chat(chain, config, command_content)
+    # initialize_chat(chain, config, command_content)
+    
+    # 5-1) 인삿말 프롬프트(한 번만 실행)
+    greet = greet_command()
+    print("[command]", greet)
+    print("[dogcommand] khi")
 
     while True: 
         user_input = input("[사용자] ") 
@@ -468,20 +452,19 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
             print("[SYSTEM] 종료합니다. 좋은 하루 보내세요!") 
             break 
 
-        # user_input="Hi buddy, you welcome. Tell me about yourself shortly."
-        response = chain.invoke( {"user_input": user_input}, config=config, ) 
+        response = chain.invoke( {"user_input": user_input}, config=config) 
 
         # 응답에서 명령어 추출 및 정리
         command=response
         
         if command:
-            # 4-1) greeting 명령 포맷 통일
+            # 5-2) greeting 명령 포맷 통일
             command = command.replace(
                 "The relevant command for your greeting is:",
                 "The relevant command is:"
             )
 
-            # 4-2) 명령어가 포함된 경우
+            # 5-3) 명령어가 포함된 경우
             if "The relevant command is:" in command:
                 # 문장과 명령 부분 분리
                 parts = command.split("The relevant command is:")
@@ -492,7 +475,7 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
                 dogcommand = match.group(1).strip() if match else None
 
                 print("[command]", description)
-                # 4-3) 출력 형식 정리
+                # 5-4) 출력 형식 정리
                 if dogcommand:
                     print("[dogcommand]", dogcommand)
                     dogcommand = dogcommand.replace(".", "").strip()
@@ -508,7 +491,7 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
                 else:
                     print("[경고] 명령어 태그(## ##)를 찾지 못했습니다.")
 
-            # 4-4) 일반 대화 처리
+            # 5-5) 일반 대화 처리
             else:
                 description = command.strip().replace("The relevant command is:", "")
                 print("[command]", description)
