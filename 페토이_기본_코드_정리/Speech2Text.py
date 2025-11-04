@@ -1,5 +1,5 @@
 import speech_recognition as sr
-from Text2SpeechEn import text_to_speech_stream
+from Text2Speech import text_to_speech_stream
 
 def listen_and_transcribe():
     recognizer = sr.Recognizer() # Recognizer 객체 생성

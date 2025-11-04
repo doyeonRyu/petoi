@@ -50,7 +50,7 @@ Note:
     - 대화 이력 관리 및 GPT 모델 연동 기능 고도화
 
 Limitations:
-    - 현재 개발 과정이므로 STT, TTS, 실제 Petoi 동작은 구현하지 않음 (수정 필요)
+    - 현재 개발 과정이므로 STT, TTS, 실제 Petoi 동작은 주석 처리
     - py 파일 실행시 commands.json 파일의 내용을 전부 gpt한테 입력 -> 토큰 사용량 큼
         -> 한 번만 추가하고 이후에 대화 반복으로 코드 변경함
     - json 파일로 대화 저장하지만, 실제 대화에서는 이전 대화를 참고하지 않고 프로필만 참고함
@@ -86,8 +86,8 @@ from PetoiRobot import * # Petoi 로봇 제어
 import os
 import json
 from dotenv import load_dotenv # .env 파일 로드
-# from speechtotextEn import listen_and_transcribe # STT
-# from Text2SpeechEn import text_to_speech_stream # TTS
+from Speech2Text import listen_and_transcribe # STT
+from Text2Speech import text_to_speech_stream # TTS
 import speech_recognition as sr # 음성 인식
 
 
@@ -131,7 +131,7 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
     """
     
     # logs 폴더 없으면 생성
-    os.makedirs("./logs", exist_ok=True)
+    os.makedirs("./GPT_related/logs", exist_ok=True)
     
     # 세션이 store에 존재하지 않으면 새로 생성
     if session_id not in store:
@@ -168,7 +168,7 @@ def load_commands(file_path: str) -> str:
 
 
 # ============================================================================
-# 4. 사용자 프로필 저장하기
+# 4. 사용자 프로필 로드, 저장하기
 # ============================================================================
 
 # 1) 프로필 로드 함수
@@ -241,13 +241,12 @@ def find_profile_by_name(profiles: list[dict], user_name: str) -> dict | None:
 
 
 # ============================================================================
-# 5. 사용자 프로필 저장하기 
-#   - 처음 부팅 시 할 일
+# 5. 프로필에 새 사용자 정보 전달하기
 # ============================================================================
 
 # 부팅(첫 실행) 절차: 인사 + 질문 (사용자 정보 저장을 위한)
 # 1. 부팅 시 첫 실행 절차 진행 함수
-def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
+def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=False) -> dict:
     """
     Function: run_boot_sequence
         - Bittle의 부팅 절차 (인사 + 프로필 수집)
@@ -293,7 +292,11 @@ def run_boot_sequence(model, profile_path: json, session_id: str) -> dict:
         _ = chat_chain.invoke({"user_input": q}, config={"configurable": {"session_id": session_id}})
         print(f"[Bittle] {q}") # BITTLE 질문
 
-        answer = input("[사용자] ").strip() # 사용자 응답
+        # 사용자 응답
+        if use_voice:
+            answer = listen_and_transcribe()
+        else:
+            answer = input("[사용자] ").strip() 
 
         # 사용자의 답변도 memory에 기록됨
         _ = chat_chain.invoke({"user_input": answer}, config={"configurable": {"session_id": session_id}})
@@ -366,7 +369,7 @@ def build_chat_chain(model, get_session_history, session_id, config, command_con
                 "   - 그냥 네가 아는 지식이나 대화로 한국어로 자연스럽게 답해. "
                 "   - 이 경우에는 절대 명령어를 출력하지 마. "
                 "즉, 로봇 명령일 때만 ##명령어##를 포함하고, 그 외에는 지식과 대화를 통해 답해야 해."
-                "Hi I am working on a programmable robot dog. I am developing a software to control this robot from remote. And also I want to chat with this dog. I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. The relevant command is:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
+                "I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. The relevant command is:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
                 "Here is your command set:\n{command_content}\n\n"
                 f"{profile_text}"),
             MessagesPlaceholder(variable_name="history"), # 과거 대화 이력 자리표시자
@@ -402,17 +405,30 @@ def build_chat_chain(model, get_session_history, session_id, config, command_con
 # 7. main 함수 
 # ============================================================================
 if __name__ == "__main__": # 모듈 단독 실행 시만 동작 
-    # 1) 명령어, 프로필 파일 불러오기
-    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\페토이_기본_코드_정리\\Commands.json' 
+    # 0) 입력 방식 선택
+    print("입력 방식을 선택하세요:")
+    print("1. 음성 입력")
+    print("2. 키보드 입력")
+    choice = input("번호 입력 (1 or 2): ")
+
+    use_voice = (choice.strip() == "1")
+
+    # 1) 명령어, 프로필 파일 불러오기 (절대 경로)
+    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\GPT_related\\Commands.json' 
     command_content = load_commands(command_path)
     
-    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\페토이_기본_코드_정리\\bittle_profile.json" 
+    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\GPT_related\\bittle_profile.json" 
     profiles = load_profiles(profile_path) 
 
     # 2) 처음 부팅 시 사용자 이름 - 프로필 매칭을 위한 과정
-    print("안녕! 너 이름이 뭐야?\n") 
-    user_name = input("[사용자 이름] ").strip() 
-    
+    system_msg = "안녕! 너 이름이 뭐야?"
+    print(f"[SYSTEM] {system_msg}")
+    # text_to_speech_stream(system_msg)
+    if use_voice:
+        user_name = listen_and_transcribe()
+    else:
+        user_name = input("[사용자 이름] ").strip()
+        
     # 3) 세션 구성
     session_id = f"{user_name}_session" # 부팅 + 대화 동일 세션에 저장되도록 구성
     config = {"configurable": {"session_id": session_id}} 
@@ -423,39 +439,63 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     
     # 기존 프로필이 없을 때
     if profile is None: 
-        print(f"[SYSTEM] 반가워, {user_name}! 새 프로필을 만들어줄게.") 
-        new_profile = run_boot_sequence(model, profile_path, session_id) # 부팅 작업
+        system_msg = f"반가워, {user_name}! 새 프로필을 만들어줄게."
+        print(f"[SYSTEM] {system_msg}")
+        # text_to_speech_stream(system_msg)
+
+        new_profile = run_boot_sequence(model, profile_path, session_id, use_voice) # 부팅 작업
         new_profile["name"] = user_name # 새 사용자 이름까지 포함
         profiles.append(new_profile) # 프로필에 추가 
         save_profiles(profiles, profile_path) # 저장
-        print(f"[SYSTEM] 새 프로필이 저장되었습니다.")
-        profile = new_profile 
+
+        system_msg = "새 프로필이 저장되었습니다."
+        print(f"[SYSTEM] {system_msg}")
+        # text_to_speech_stream(system_msg)
+        profile = new_profile
     # 기존 프로필이 존재할 때
-    else: print(f"[SYSTEM] 환영해, {user_name}! 기존 프로필을 불러왔어:\n{profile}") # 프로필 반영된 체인 재생성 (같은 세션 유지) 
+    else: 
+        system_msg = f"환영해, {user_name}! 기존 프로필을 불러왔어."
+        print(f"[SYSTEM] {system_msg}")
+        # text_to_speech_stream(system_msg)
+        print(profile)
     
     # 대화 체인에 프로필 정보 추가
     chain = build_chat_chain(model, get_session_history, session_id, config, command_content, profile) 
     
     # 5) 대화 시스템 작동
-    print("\n[SYSTEM] 대화를 시작합니다. '종료' 입력 시 종료됩니다.") 
-    # initialize_chat(chain, config, command_content)
-    
+    system_msg = "대화를 시작합니다. 종료라고 말하면 언제든 끝낼 수 있습니다."
+    print(f"[SYSTEM] {system_msg}")
+    # text_to_speech_stream(system_msg)
+
     # 5-1) 인삿말 프롬프트(한 번만 실행)
     greet = greet_command()
     print("[command]", greet)
-    print("[dogcommand] khi")
+    # text_to_speech_stream(greet)
+
+    # 인사 명령 (필요 시 주석 해제)
+    dogcommand = "khi"
+    print("[dogcommand]", dogcommand)
+    # task = [dogcommand, 1]
+    # send(goodPorts, task)
 
     while True: 
-        user_input = input("[사용자] ") 
+        if use_voice:
+            user_input = listen_and_transcribe() # STT로 부터 입력 텍스트로 전환
+            print("[사용자]", user_input)
+        else:
+            user_input = input("[사용자] ")
+            
         # 종료 시스템
-        if user_input.strip().lower() in ("종료", "exit", "quit"): 
-            print("[SYSTEM] 종료합니다. 좋은 하루 보내세요!") 
-            break 
+        if user_input.strip().lower() in ("종료", "exit", "quit"):
+            system_msg = "종료합니다. 좋은 하루 보내세요!"
+            print(f"[SYSTEM] {system_msg}")
+            # text_to_speech_stream(system_msg)
+            break
 
         response = chain.invoke( {"user_input": user_input}, config=config) 
 
         # 응답에서 명령어 추출 및 정리
-        command=response
+        command = response
         
         if command:
             # 5-2) greeting 명령 포맷 통일
@@ -475,6 +515,8 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
                 dogcommand = match.group(1).strip() if match else None
 
                 print("[command]", description)
+                # text_to_speech_stream(description)
+
                 # 5-4) 출력 형식 정리
                 if dogcommand:
                     print("[dogcommand]", dogcommand)
@@ -489,9 +531,12 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
                     # task = ["ksit", 1]
                     # send(goodPorts, task) or send
                 else:
-                    print("[경고] 명령어 태그(## ##)를 찾지 못했습니다.")
+                    warning = "명령어 태그를 찾지 못했습니다."
+                    print(f"[SYSTEM] {warning}")
+                    # text_to_speech_stream(warning)
 
             # 5-5) 일반 대화 처리
             else:
                 description = command.strip().replace("The relevant command is:", "")
                 print("[command]", description)
+                # text_to_speech_stream(description)
