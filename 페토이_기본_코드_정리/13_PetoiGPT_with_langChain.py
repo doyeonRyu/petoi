@@ -6,7 +6,7 @@ Summary: 랭체인을 통한 대화 이력 관리 및 GPT 모델 연동 Petoi �
 Author: 유도연
 Created Date: 2025-10-27
 Last Modified: 2025-11-03
-    Commit Message: "데모 단계: STT, TTS, Petoi 명령어 전달 과정은 제외"
+    Commit Message: "데모 단계 완료: STT, TTS, Petoi 명령어 전달 과정은 주석 처리"
 ==============================================================================
 Description
     - Petoi 로봇 강아지와의 대화를 위한 랭체인 기반 GPT 인터페이스 구현
@@ -51,8 +51,7 @@ Note:
 
 Limitations:
     - 현재 개발 과정이므로 STT, TTS, 실제 Petoi 동작은 주석 처리
-    - py 파일 실행시 commands.json 파일의 내용을 전부 gpt한테 입력 -> 토큰 사용량 큼
-        -> 한 번만 추가하고 이후에 대화 반복으로 코드 변경함
+    - 프롬프트로 명령어 리스트 제공하므로 토크 소비 큼
     - json 파일로 대화 저장하지만, 실제 대화에서는 이전 대화를 참고하지 않고 프로필만 참고함
     - 메모리, 토큰 관리 필요
 
@@ -86,9 +85,10 @@ from PetoiRobot import * # Petoi 로봇 제어
 import os
 import json
 from dotenv import load_dotenv # .env 파일 로드
+import speech_recognition as sr # 음성 인식
 from Speech2Text import listen_and_transcribe # STT
 from Text2Speech import text_to_speech_stream # TTS
-import speech_recognition as sr # 음성 인식
+
 
 
 # ============================================================================
@@ -138,14 +138,14 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
         # 메모리에 임시 저장
         # store[session_id] = InMemoryChatMessageHistory() # 새로운 세션이면 새 이력 생성
         # json에 영구 저장
-        store[session_id] = FileChatMessageHistory(f"./logs/{session_id}.json") 
+        store[session_id] = FileChatMessageHistory(f"./GPT_related/logs/{session_id}.json") 
         # print(f"[get_session_history 디버깅] 새로운 세션 생성: {session_id}")
     else: # 기존 세션이면 기존 세션 불러오기
         pass
 
     # 기존 세션이 InMemory면 강제로 FileChatMessageHistory로 교체
     if session_id in store and not isinstance(store[session_id], FileChatMessageHistory):
-        store[session_id] = FileChatMessageHistory(f"./logs/{session_id}.json")
+        store[session_id] = FileChatMessageHistory(f"./GPT_related/logs/{session_id}.json")
 
     return store[session_id] 
 
@@ -178,11 +178,9 @@ def load_profiles(path: str) -> list[dict]:
         - 지정된 경로의 json 파일에서 사용자 프로필 리스트 불러오기 
         - 파일이 없거나 손상된 경우 새 파일 생성, 빈 리스트 반환
     Parameters:
-        - path: str
-            - 프로필 데이터(json 파일)가 저장된 경로
+        - path (str): 프로필 데이터(json 파일)가 저장된 경로
     Return:
-        - profiles: list[dict]
-            - 로드된 프로필 정보의 리스트 (각 항목: dict)
+        - profiles (list[dict]): 로드된 프로필 정보의 리스트 (각 항목: dict)
     """
     
     # 1-1) 해당 경로에 파일이 존재하지 않으면 새로 생성
@@ -226,10 +224,8 @@ def find_profile_by_name(profiles: list[dict], user_name: str) -> dict | None:
     Function: find_profile_by_name
         - 입력된 이름과 일치하는 프로필을 반환하기
     Parameters: 
-        - profiles (list[dict])
-            - 프로필 목록
-        - user_name (str)
-            - 입력된 이름
+        - profiles (list[dict]): 프로필 목록
+        - user_name (str): 입력된 이름
     Return:
         - 매칭된 프로필 dictionary
     """
@@ -335,14 +331,14 @@ def build_chat_chain(model, get_session_history, session_id, config, command_con
         - 대화 이력과 사용자 프로필 정보를 포함하는 대화 체인 생성
     Parameters:
         - model: GPT 모델
-          session_id: 문자열, 특정 세션을 구분하기 위한 고유 ID
+          session_id (str): 특정 세션을 구분하기 위한 고유 ID
         - get_session_history: session_id를 받아 대화 이력 반환
-        - profile: 대화 당사자 정보 불러오기
+        - profile: 대화 당사자 정보 불러오기 (default = None)
     Return:
         - with_message_history: 대화 이력과 사용자 프로필 정보를 포함한 체인 리턴
     """
     # 1) 프롬프트에 사용자 프로필을 반영하기 위한 프로필 텍스트화
-    # 프로필 정보 초기화
+    #    프로필 정보 초기화
     profile_text = ""
 
     if profile:
@@ -378,7 +374,7 @@ def build_chat_chain(model, get_session_history, session_id, config, command_con
     filled_prompt = prompt.partial(command_content=command_content)
 
     # 3) 프롬프트 -> 모델 -> 문자열 파싱으로 이어지는 체인 구성
-    # str 형태로 모델 응답 반환
+    #    str 형태로 모델 응답 반환
     chain = filled_prompt | model | StrOutputParser()
     
     # 4) sessionn_id가 store에 없다면 해당 세션용 대화 이력 저장소 생성
@@ -399,6 +395,7 @@ def build_chat_chain(model, get_session_history, session_id, config, command_con
     
     # 6) 최종적으로 히스토리, 사용자 프로필 연동이 포함된 체인 반환
     return with_message_history
+
 
 
 # ============================================================================
@@ -467,7 +464,7 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     print(f"[SYSTEM] {system_msg}")
     # text_to_speech_stream(system_msg)
 
-    # 5-1) 인삿말 프롬프트(한 번만 실행)
+    # 5-1) 인삿말 프롬프트 (한 번만 실행)
     greet = greet_command()
     print("[command]", greet)
     # text_to_speech_stream(greet)

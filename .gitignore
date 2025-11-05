@@ -1,2 +1,4 @@
 **/.env
 GPT_related/*
+*/__pycache__/
+/페토이_기본_코드_정리/13_PetoiGPT_with_FewShot.py
