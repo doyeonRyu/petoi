@@ -5,7 +5,7 @@ File: 13_PetoiGPT_with_langChain.py
 Summary: 랭체인을 통한 대화 이력 관리 및 GPT 모델 연동 Petoi 구현
 Author: 유도연
 Created Date: 2025-10-27
-Last Modified: 2025-11-03
+Last Modified: 2025-11-05
     Commit Message: "데모 단계 완료: STT, TTS, Petoi 명령어 전달 과정은 주석 처리"
 ==============================================================================
 Description
@@ -54,6 +54,7 @@ Limitations:
     - 프롬프트로 명령어 리스트 제공하므로 토크 소비 큼
     - json 파일로 대화 저장하지만, 실제 대화에서는 이전 대화를 참고하지 않고 프로필만 참고함
     - 메모리, 토큰 관리 필요
+    - 감정 표현, 
 
 ==============================================================================
 """
@@ -68,6 +69,7 @@ from langchain_core.prompts import (
     ChatPromptTemplate, # 챗 프롬포트 템플릿
     MessagesPlaceholder # 메시지 플레이스 홀더
 )
+from langchain.chains import LLMChain
 from langchain_core.output_parsers import StrOutputParser # 출력 파서 (str 형식으로 출력)
 
 # 대화 기록
@@ -77,6 +79,7 @@ from langchain_core.chat_history import (
     InMemoryChatMessageHistory, # 메모리 기반 대화 기록
 )
 from langchain_community.chat_message_histories import FileChatMessageHistory # 대화 기록 json으로 저장 위함
+from langchain.memory import ConversationBufferMemory # 대화 맥락 기억
 
 # 2) Petoi 관련 라이브러리 로드
 from PetoiRobot import * # Petoi 로봇 제어
@@ -168,7 +171,35 @@ def load_commands(file_path: str) -> str:
 
 
 # ============================================================================
-# 4. 사용자 프로필 로드, 저장하기
+# 4. 이전 대화 이력 불러오기
+# ============================================================================
+# 1) 기존 대화 json 복원 함수 (재부팅 시)
+def load_chat_history(path: str, memory: ConversationBufferMemory):
+    if not os.path.exists(path):
+        return
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for msg in data:
+        if msg["type"] == "human":
+            memory.chat_memory.add_user_message(msg["data"]["content"])
+        elif msg["type"] == "ai":
+            memory.chat_memory.add_ai_message(msg["data"]["content"])
+
+# 2) 메모리 저장 (프로그램 종료 시)
+def save_chat_history(path: str, memory: ConversationBufferMemory):
+    messages = []
+    for m in memory.chat_memory.messages:
+        role = "human" if m.type == "human" else "ai"
+        messages.append({
+            "type": role,
+            "data": {"content": m.content}
+        })
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(messages, f, ensure_ascii=False, indent=2)
+
+
+# ============================================================================
+# 5. 사용자 프로필 로드, 저장하기
 # ============================================================================
 
 # 1) 프로필 로드 함수
@@ -237,11 +268,11 @@ def find_profile_by_name(profiles: list[dict], user_name: str) -> dict | None:
 
 
 # ============================================================================
-# 5. 프로필에 새 사용자 정보 전달하기
+# 6. 프로필에 새 사용자 정보 전달하기
 # ============================================================================
 
 # 부팅(첫 실행) 절차: 인사 + 질문 (사용자 정보 저장을 위한)
-# 1. 부팅 시 첫 실행 절차 진행 함수
+# 1) 부팅 시 첫 실행 절차 진행 함수
 def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=False) -> dict:
     """
     Function: run_boot_sequence
@@ -254,7 +285,7 @@ def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=Fals
     Returns:
         - profile (dict): 수집된 사용자 프로필 정보
     """
-    # 1) 사용자 프로필에 저장할 기본 질문 (추가 예정)
+    # 1-1) 사용자 프로필에 저장할 기본 질문 (추가 예정)
     #   - 정보 수집에 이용
     questions = [
         "너를 뭐라고 불러주면 좋겠어?",
@@ -263,17 +294,17 @@ def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=Fals
 
     profile = {} # 프로필 초기화
 
-    # 1-1) 기본 질문을 위한 프롬프트
+    # 1-2) 기본 질문을 위한 프롬프트
     chat_prompt = ChatPromptTemplate.from_messages([
         ("system", "너는 사용자의 초기 설정을 돕는 로봇 강아지 Bittle이야. 질문만 짧고 친근하게 해."),
         MessagesPlaceholder(variable_name="history"), # 과거 대화 이력 자리표시자
         ("human", "{user_input}")
     ])
 
-    # 1-2) 정보 수집 체인 생성
+    # 1-3) 정보 수집 체인 생성
     chat_chain = chat_prompt | model | StrOutputParser()
     
-    # 1-3) RunnableWithMessageHistory로 체인 래핑
+    # 1-4) RunnableWithMessageHistory로 체인 래핑
     chat_chain = RunnableWithMessageHistory(
         chat_chain,
         get_session_history,
@@ -281,7 +312,7 @@ def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=Fals
         history_messages_key="history"
     )
 
-    # 2) 실제 질의응답 
+    # 1-5) 실제 질의응답 
     #   - LangChain memory에 자동 기록
     for q in questions:
         # Bittle이 묻는 말도 memory에 기록됨
@@ -305,7 +336,7 @@ def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=Fals
 
     return profile
 
-# 2. 인삿말 프롬프트
+# 2) 인삿말 프롬프트
 def greet_command():
     greet_prompt = ChatPromptTemplate.from_messages([
         ("system", 
@@ -313,17 +344,20 @@ def greet_command():
         ("human", "{user_input}")
     ])
 
-    # 1) 부팅 체인 생성
+    # 2-1) 부팅 체인 생성
     greet_chain = greet_prompt | model | StrOutputParser()
 
-    # 2) 인삿말 생성 및 출력
+    # 2-2) 인삿말 생성 및 출력
     greet = greet_chain.invoke({"user_input": "안녕 Bittle! 처음 시작했으니 인사해줘."})
     return greet
 
 # ============================================================================
 # 6. 시스템 프롬프트 및 대화 체인 생성 함수
 # ============================================================================
-def build_chat_chain(model, get_session_history, session_id, config, command_content, profile=None):
+# def build_chat_chain(model, get_session_history, session_id, 
+#                     config, command_content, profile,
+#                     memory):
+def build_chat_chain(model, command_content, profile, memory):
     """
     Function: build_chat_chain
         - 시스템 프롬프트 정의 
@@ -373,33 +407,43 @@ def build_chat_chain(model, get_session_history, session_id, config, command_con
     ])
     filled_prompt = prompt.partial(command_content=command_content)
 
-    # 3) 프롬프트 -> 모델 -> 문자열 파싱으로 이어지는 체인 구성
-    #    str 형태로 모델 응답 반환
-    chain = filled_prompt | model | StrOutputParser()
+    # # 3) 프롬프트 -> 모델 -> 문자열 파싱으로 이어지는 체인 구성
+    # #    str 형태로 모델 응답 반환
+    # chain = filled_prompt | model | StrOutputParser()
     
-    # 4) sessionn_id가 store에 없다면 해당 세션용 대화 이력 저장소 생성
-    if session_id not in store:
-        store[session_id] = InMemoryChatMessageHistory()
-        # print(f"[build_chat_chain 디버깅] 세션 {session_id} 새로 생성")
-    # else:
-        # print(f"[build_chat_chain 디버깅] 세션 {session_id} 재사용")
+    # # 4) sessionn_id가 store에 없다면 해당 세션용 대화 이력 저장소 생성
+    # if session_id not in store:
+    #     store[session_id] = InMemoryChatMessageHistory()
+    #     # print(f"[build_chat_chain 디버깅] 세션 {session_id} 새로 생성")
+    # # else:
+    #     # print(f"[build_chat_chain 디버깅] 세션 {session_id} 재사용")
 
-    # 5) RunnableWithMessageHistory로 체인 래핑
-    with_message_history = RunnableWithMessageHistory(
-        chain,
-        get_session_history, # 외부에서 session_id 기반으로 히스토리 반환하는 콜백
-        input_messages_key="user_input", # invoke 시 사용자 입력을 넣을 키
-        history_messages_key="history", # 과거 메시지들이 주입될 자리표시자 키
-        config=config
-    )
+    # # 5) RunnableWithMessageHistory로 체인 래핑
+    # with_message_history = RunnableWithMessageHistory(
+    #     chain,
+    #     get_session_history, # 외부에서 session_id 기반으로 히스토리 반환하는 콜백
+    #     input_messages_key="user_input", # invoke 시 사용자 입력을 넣을 키
+    #     history_messages_key="history", # 과거 메시지들이 주입될 자리표시자 키
+    #     config=config
+    # )
     
-    # 6) 최종적으로 히스토리, 사용자 프로필 연동이 포함된 체인 반환
-    return with_message_history
+    # # 6) 최종적으로 히스토리, 사용자 프로필 연동이 포함된 체인 반환
+    # return with_message_history
+    
+    # 4) memory와 함께 LLMChain 구성
+    chain = LLMChain(
+        llm=model,
+        prompt=filled_prompt,
+        memory=memory,
+        verbose=False
+    )
+
+    return chain
 
 
 
 # ============================================================================
-# 7. main 함수 
+# 8. main 함수 
 # ============================================================================
 if __name__ == "__main__": # 모듈 단독 실행 시만 동작 
     # 0) 입력 방식 선택
@@ -411,10 +455,10 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     use_voice = (choice.strip() == "1")
 
     # 1) 명령어, 프로필 파일 불러오기 (절대 경로)
-    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\GPT_related\\Commands.json' 
+    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Commands.json' 
     command_content = load_commands(command_path)
     
-    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\robotdog\\petoi\\유도연\\GPT_related\\bittle_profile.json" 
+    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\bittle_profile.json" 
     profiles = load_profiles(profile_path) 
 
     # 2) 처음 부팅 시 사용자 이름 - 프로필 매칭을 위한 과정
@@ -426,10 +470,13 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     else:
         user_name = input("[사용자 이름] ").strip()
         
-    # 3) 세션 구성
+    # 3) 세션 및 메모리구성
     session_id = f"{user_name}_session" # 부팅 + 대화 동일 세션에 저장되도록 구성
     config = {"configurable": {"session_id": session_id}} 
     
+    # 메모리 생성
+    memory = ConversationBufferMemory(memory_key="history", return_messages=True)
+
     # 4) 사용자 프로필 로드 혹은 생성
     # 사용자 이름과 프로필 매칭하기
     profile = find_profile_by_name(profiles, user_name) 
@@ -451,13 +498,20 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
         profile = new_profile
     # 기존 프로필이 존재할 때
     else: 
+        # 대화 이력 불러오기
+        chat_file = f"C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\logs\\{user_name}_history.json"
+        # 재부팅 시 이전 대화 복원
+        load_chat_history(chat_file, memory)
+
         system_msg = f"환영해, {user_name}! 기존 프로필을 불러왔어."
         print(f"[SYSTEM] {system_msg}")
         # text_to_speech_stream(system_msg)
         print(profile)
     
     # 대화 체인에 프로필 정보 추가
-    chain = build_chat_chain(model, get_session_history, session_id, config, command_content, profile) 
+    # chain = build_chat_chain(model, session_id, get_session_history,
+    #                         config, command_content, profile, memory) 
+    chain = build_chat_chain(model, command_content, profile, memory) 
     
     # 5) 대화 시스템 작동
     system_msg = "대화를 시작합니다. 종료라고 말하면 언제든 끝낼 수 있습니다."
@@ -478,9 +532,11 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     while True: 
         if use_voice:
             user_input = listen_and_transcribe() # STT로 부터 입력 텍스트로 전환
+            memory.chat_memory.add_user_message(user_input)
             print("[사용자]", user_input)
         else:
-            user_input = input("[사용자] ")
+            user_input = input("[사용자] ") 
+            memory.chat_memory.add_user_message(user_input)
             
         # 종료 시스템
         if user_input.strip().lower() in ("종료", "exit", "quit"):
@@ -489,7 +545,9 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
             # text_to_speech_stream(system_msg)
             break
 
-        response = chain.invoke( {"user_input": user_input}, config=config) 
+        response = chain.invoke( {"user_input": user_input}) 
+        response = response["text"]
+        memory.chat_memory.add_ai_message(response)
 
         # 응답에서 명령어 추출 및 정리
         command = response
@@ -537,3 +595,6 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
                 description = command.strip().replace("The relevant command is:", "")
                 print("[command]", description)
                 # text_to_speech_stream(description)
+
+    # 종료 시 저장
+    save_chat_history(chat_file, memory)
