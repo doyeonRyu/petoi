@@ -62,6 +62,7 @@ Limitations:
 # ============================================================================
 # 1. 라이브러리 로드 
 # ============================================================================
+
 # 1) 랭체인 관련 라이브러리 로드 
 import langchain # LangChain 기본 라이브러리
 from langchain_openai import ChatOpenAI # OpenAI 모델 연동
@@ -97,6 +98,7 @@ from Text2Speech import text_to_speech_stream # TTS
 # ============================================================================
 # 2. 기본 환경 세팅
 # ============================================================================
+
 # 1) .env 파일에서 환경 변수 로드
 load_dotenv() # API 불러오기
 
@@ -110,6 +112,7 @@ model = ChatOpenAI(
 
 # 3) Petoi 포트 연결 # 우선 생략
 # autoConnect() # 자동 포트 연결 함수 호출
+
 
 
 # ============================================================================
@@ -133,7 +136,7 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
         - 기존에 있으면 해당 기록 반환
     """
     
-    # logs 폴더 없으면 생성
+    # logs 폴더 없으면 생성 # 사용자 경로로 수정
     os.makedirs("./GPT_related/logs", exist_ok=True)
     
     # 세션이 store에 존재하지 않으면 새로 생성
@@ -173,6 +176,7 @@ def load_commands(file_path: str) -> str:
 # ============================================================================
 # 4. 이전 대화 이력 불러오기
 # ============================================================================
+
 # 1) 기존 대화 json 복원 함수 (재부팅 시)
 def load_chat_history(path: str, memory: ConversationBufferMemory):
     if not os.path.exists(path):
@@ -196,6 +200,7 @@ def save_chat_history(path: str, memory: ConversationBufferMemory):
         })
     with open(path, "w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=2)
+
 
 
 # ============================================================================
@@ -271,8 +276,8 @@ def find_profile_by_name(profiles: list[dict], user_name: str) -> dict | None:
 # 6. 프로필에 새 사용자 정보 전달하기
 # ============================================================================
 
-# 부팅(첫 실행) 절차: 인사 + 질문 (사용자 정보 저장을 위한)
 # 1) 부팅 시 첫 실행 절차 진행 함수
+# 부팅(첫 실행) 절차: 인사 + 질문 (사용자 정보 저장을 위한)
 def run_boot_sequence(model, profile_path: json, session_id: str, use_voice=False) -> dict:
     """
     Function: run_boot_sequence
@@ -350,6 +355,8 @@ def greet_command():
     # 2-2) 인삿말 생성 및 출력
     greet = greet_chain.invoke({"user_input": "안녕 Bittle! 처음 시작했으니 인사해줘."})
     return greet
+
+
 
 # ============================================================================
 # 6. 시스템 프롬프트 및 대화 체인 생성 함수
@@ -454,7 +461,7 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
 
     use_voice = (choice.strip() == "1")
 
-    # 1) 명령어, 프로필 파일 불러오기 (절대 경로)
+    # 1) 명령어, 프로필 파일 불러오기 (절대 경로) # 사용자 경로로 수정
     command_path = 'C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Commands.json' 
     command_content = load_commands(command_path)
     
@@ -498,7 +505,7 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
         profile = new_profile
     # 기존 프로필이 존재할 때
     else: 
-        # 대화 이력 불러오기
+        # 대화 이력 불러오기 # 사용자 경로로 수정
         chat_file = f"C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\logs\\{user_name}_history.json"
         # 재부팅 시 이전 대화 복원
         load_chat_history(chat_file, memory)

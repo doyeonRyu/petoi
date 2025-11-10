@@ -68,6 +68,7 @@ Limitations:
 # ============================================================================
 # 1. 라이브러리 로드 
 # ============================================================================
+
 # 1) 랭체인 관련 라이브러리 로드 
 import langchain # LangChain 기본 라이브러리
 from langchain_openai import ChatOpenAI # OpenAI 모델 연동
@@ -117,7 +118,7 @@ model = ChatOpenAI(
 )
 
 # 3) Petoi 포트 연결 # 우선 생략
-# autoConnect() # 자동 포트 연결 함수 호출
+autoConnect() # 자동 포트 연결 함수 호출
 
 
 
@@ -300,7 +301,7 @@ def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, cha
         print(f"[SYSTEM] 기존 사용자 로드 완료 (ID={user_profile['user_id']}, Name={user_profile['user_name']})")
 
         # CHAT_HISTORY 테이블에서 대화 이력 로드 
-        # 메모리 관리를 위해 우선 5일 이전의 대화만 로드 
+        #    메모리 관리를 위해 우선 5일 이전의 대화만 로드 
         cur.execute("""
             SELECT role, content, timestamp 
             FROM CHAT_HISTORY 
@@ -367,6 +368,7 @@ def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, cha
 # =============================================================================
 # 6. 프로그램 시작 시 작동 함수
 # =============================================================================
+
 # 1) Bittle 부팅 시 작동 함수
 def run_boot_sequence(model, session_id: str, use_voice=False) -> dict:
     """
@@ -432,8 +434,8 @@ def run_boot_sequence(model, session_id: str, use_voice=False) -> dict:
 
 
 
-# 2. 인삿말 생성 함수
-def greet_command(model):
+# 2) 인삿말 생성 함수
+def greet_command(model, profile):
     """
     Function: greet_command
         - 인삿말 프롬프르
@@ -443,14 +445,21 @@ def greet_command(model):
     Return: 
         - greet: 인삿말 체인
     """
+    if profile:
+        user_name = profile.get("user_name")
     # 인삿말 프롬프트
     greet_prompt = ChatPromptTemplate.from_messages([
-        ("system", "너는 Bittle이야. 밝고 귀엽게 인사만 해. 이모티콘은 쓰지 말고 간결하게 인사해."),
+        ("system", "너는 Bittle이야. 사용자 이름을 부르며 밝고 귀엽게 인사만 해. 이모티콘은 쓰지 말고 간결하게 인사해."
+         "사용자 이름: '{user_name}'"),
         ("human", "{user_input}")
     ])
 
+    # 프롬프트에 이름 삽입
+    greet_prompt = greet_prompt.partial(user_name=user_name)
+
     # 인삿말 출력을 위한 체인 생성
     greet_chain = greet_prompt | model | StrOutputParser()
+
     greet = greet_chain.invoke({"user_input": "안녕 Bittle! 처음 시작했으니 인사해줘."})
     return greet
 
@@ -480,12 +489,12 @@ def build_chat_chain(
     Return:
         - chain_with_memory: 대화 이력과 사용자 프로필 정보를 포함한 체인
     """
-
     # 1) 프로필, 대화 이력 자동 로드 후 프롬프트에 반영
     if profile:
-        name = profile.get("name")
-        note = " / ".join(profile.get("notes", []))
-        profile_text = f"지금 대화 중인 사람은 '{name}'이며, 특징: {note}"
+        name = profile.get("user_name")
+        note = profile.get("note", "")
+        note_text = note if note else "등록된 특징 없음"
+        profile_text = f"지금 대화 중인 사람은 '{name}'이며, 특징: {note_text}"
     else:
         profile_text = "지금 대화 중인 사람은 기본 사용자이며, 아직 등록된 프로필이 없습니다."
 
@@ -517,11 +526,16 @@ def build_chat_chain(
                 "즉, 로봇 명령일 때만 ##명령어##를 포함하고, 그 외에는 지식과 대화를 통해 답해야 해."
                 "I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. The relevant command is:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
                 "Here is your command set:\n{command_content}\n\n"
-                f"{profile_text}"),
+                "현재 대화 중인 사람은 '{profile_text}'이며, 이 사용자의 이름: '{user_name}'."
+                "항상 사용자 이름을 기억하고 사용자를 부를 때나 자연스러운 대화에서 이름을 사용해"),
             MessagesPlaceholder(variable_name="history"), # 과거 대화 이력 자리표시자
             ("human", "{user_input}") # 현재 사용자 입력 자리
     ])
-    filled_prompt = prompt.partial(command_content=command_content)
+    filled_prompt = prompt.partial(
+        command_content=command_content, 
+        profile_text=profile_text,
+        user_name=name
+    )
 
     # 4) memory와 함께 LLMChain 구성
     chain = LLMChain(
@@ -541,9 +555,14 @@ def build_chat_chain(
 
     # 6) 대화 이력 임시 저장
     memory = get_session_history(session_id)
+
+    # 프로필을 시스템 메시지로 한 번만 기록
+    if profile_text:
+        memory.add_message(AIMessage(content=f"[SYSTEM_PROFILE] {profile_text}"))
+
+    # 과거 대화 복원
     for msg in preloaded_messages:
         memory.add_message(msg)
-    
     return chain_with_memory
 
 
@@ -563,7 +582,7 @@ if __name__ == "__main__":
         # 1) 세션별 대화 기록 저장소 (RAM 상의 임시 메모리)
         store = {} # { "session_id": InMemoryChatMessageHistory 객체, ... }
 
-        # 2) 명령어 불러오기
+        # 2) 명령어 불러오기 # 사용자 경로로 수정
         command_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Commands.json"
         command_content = load_commands(command_path)
 
@@ -586,7 +605,7 @@ if __name__ == "__main__":
             return_messages=True # message 객체 그대로 반환
         )
 
-        # 5) 프로필 불러오기
+        # 5) 프로필 불러오기 # 사용자 경로로 수정
         DB_PATH = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Bittle.db"
 
         # DB 로드 혹은 생성
@@ -600,15 +619,15 @@ if __name__ == "__main__":
         print("[SYSTEM] 대화를 시작합니다. '종료'라고 말하면 언제든 끝낼 수 있습니다.")
 
         # 7) 인삿말 출력
-        greet = greet_command()
+        greet = greet_command(model, user_profile)
         # text_to_speech_stream(greet)
         print("[command]", greet)
 
         # 인사 명령 (필요 시 주석 해제)
         dogcommand = "khi"
         print("[dogcommand]", dogcommand)
-        # task = [dogcommand, 1]
-        # send(goodPorts, task)
+        task = [dogcommand, 1]
+        send(goodPorts, task)
 
         # =================================================================
         # 메인 대화 루프
@@ -647,8 +666,8 @@ if __name__ == "__main__":
                     dogcommand = dogcommand.replace(".", "").strip()
 
                     # 명령 실행 (필요 시 주석 해제)
-                    # task = [dogcommand, 1]
-                    # send(goodPorts, task)
+                    task = [dogcommand, 1]
+                    send(goodPorts, task)
                     time.sleep(1)
 
                     # 기본 자세 복귀 (필요 시 주석 해제)
@@ -671,7 +690,7 @@ if __name__ == "__main__":
         save_chat_history_to_db(
             path=DB_PATH,
             session_id=session_id,
-            memory=chat_memory,
+            chat_memory=chat_memory,
             user_id=user_id
         )
         print(f"[SYSTEM] 세션 '{session_id}'의 대화가 SQLite DB에 저장되었습니다.")
