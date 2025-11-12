@@ -56,12 +56,8 @@ autoConnect()
 
 SENSOR1 = 34
 SENSOR2 = 35
-READING_COUNT = 30
-SENSOR_DISPLACEMENT = 3.7
-MAX_READING = 4096  # 4096
-ratio = MAX_READING / 1024 # 1024로 나눈 비율
 
-def read_doubleIFDistance():
+def read_doubleIFDistance(SENSOR2, SENSOR1):
     """
     Function: read_doubleInfraredDistance
         - 두 개의 IR 센서로부터 값을 읽고 거리로 변환한 후 출력
@@ -70,6 +66,10 @@ def read_doubleIFDistance():
           readAnalogValue() 기반으로 변환
         - raw 값이 30 미만이면 단순 비례식 사용, 그 외엔 비선형 보정식 사용
     """
+    READING_COUNT = 30
+    SENSOR_DISPLACEMENT = 3.7
+    MAX_READING = 4096  # 4096
+    ratio = MAX_READING / 1024 # 1024로 나눈 비율
     # 1. 센서 값 읽기
     rawL = int(readAnalogValue(SENSOR2) / ratio)
     rawR = int(readAnalogValue(SENSOR1) / ratio)
@@ -78,15 +78,19 @@ def read_doubleIFDistance():
     dL = rawL / 4.0 if rawL < 30 else 200.0 / math.sqrt(1024 + 24 - rawL)
     dR = rawR / 4.0 if rawR < 30 else 200.0 / math.sqrt(1024 + 24 - rawR)
 
-    # 3. 결과 출력 (Serial.print -> print)
-    print(f"rawLeft: {rawL}\trawRight: {rawR}\tdL: {dL:.2f}\tdR: {dR:.2f}")
+    # 3. 결과 리턴
+    return rawL, rawR, dL, dR
 
 if __name__ == "__main__":
     print("Start reading double IR distance... \n")
 
     try:
         while True:
-            read_doubleIFDistance()
+            SENSOR1 = 34
+            SENSOR2 = 35
+            rawL, rawR, dL, dR = read_doubleIFDistance(SENSOR2, SENSOR1)
+            # 3. 결과 출력 (Serial.print -> print)
+            print(f"rawLeft: {rawL}\trawRight: {rawR}\tdL: {dL:.2f}\tdR: {dR:.2f}")
             time.sleep(0.5)
 
     except KeyboardInterrupt:
