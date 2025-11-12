@@ -56,29 +56,44 @@ autoConnect()
 
 SENSOR1 = 34
 SENSOR2 = 35
-MAX_READING = 1024
+READING_COUNT = 30
+SENSOR_DISPLACEMENT = 3.7
+MAX_READING = 4096  # 4096
+ratio = MAX_READING / 1024 # 1024로 나눈 비율
 
-def readAnalogValue(pin):
-    # 가상의 아날로그 센서값 읽기 (0~1023 임의값)
-    return random.randint(0, 1023)
+def read_doubleIFDistance():
+    """
+    Function: read_doubleInfraredDistance
+        - 두 개의 IR 센서로부터 값을 읽고 거리로 변환한 후 출력
+    Description:
+        - 아두이노 코드의 analogRead(SENSORx)/ratio 부분을
+          readAnalogValue() 기반으로 변환
+        - raw 값이 30 미만이면 단순 비례식 사용, 그 외엔 비선형 보정식 사용
+    """
+    # 1. 센서 값 읽기
+    rawL = int(readAnalogValue(SENSOR2) / ratio)
+    rawR = int(readAnalogValue(SENSOR1) / ratio)
 
-def read_doubleInfraredDistance():
-    # 두 개의 IR 센서 값을 읽고 거리로 변환 후 출력
-    rawL = readAnalogValue(SENSOR2) - 24
-    rawR = readAnalogValue(SENSOR1) - 24
+    # 2. 거리로 변환 (아두이노 코드의 공식 그대로)
+    dL = rawL / 4.0 if rawL < 30 else 200.0 / math.sqrt(1024 + 24 - rawL)
+    dR = rawR / 4.0 if rawR < 30 else 200.0 / math.sqrt(1024 + 24 - rawR)
 
-    # 거리 변환식 (아두이노 코드와 동일)
-    dL = rawL / 4.0 if rawL < 30 else 200.0 / math.sqrt(MAX_READING - rawL)
-    dR = rawR / 4.0 if rawR < 30 else 200.0 / math.sqrt(MAX_READING - rawR)
-
-    # 결과 출력
+    # 3. 결과 출력 (Serial.print -> print)
     print(f"rawLeft: {rawL}\trawRight: {rawR}\tdL: {dL:.2f}\tdR: {dR:.2f}")
 
-# 메인 루프
-while True:
-    read_doubleInfraredDistance()
-    time.sleep(0.5)
+if __name__ == "__main__":
+    print("Start reading double IR distance... \n")
 
+    try:
+        while True:
+            read_doubleIFDistance()
+            time.sleep(0.5)
+
+    except KeyboardInterrupt:
+        print("\n[KeyboardInterrupt] 측정을 중단합니다.")
+
+    finally:
+        closePort()
 
 # ==============================================================================
 # 대기 상태

@@ -6,7 +6,7 @@ File: 8_gesture_sensor.py
 Summary: 제스처 센서 측정 예제
 Author: 유도연
 Created Date: 2025-10-16
-Last Modified: 2025-10-16
+Last Modified: 2025-11-11
 
 ==============================================================================
 Description
@@ -43,9 +43,8 @@ autoConnect()
 # ==============================================================================
 # 제스처 센서 측정 예제
 
-sendSkillStr('kup', 0.2)
-delayTime = 0.000005
-while True:
+def read_GestureSensor():
+    delayTime = 0.000005
     value = readGestureVal()    # 0: Up; 1: Down; 2:Left; 3:Right
     print(((str("value = ")) + (str(value))))
     if (value == 0): # Up -> hi
@@ -61,10 +60,18 @@ while True:
         # stand up
         sendLongCmd('L', [0,0,0,0,0,0,0,0,30,30,30,30,30,30,30,30], delayTime)
 
-# ==============================================================================
-# 포트 닫기 # while문이라 쓰이지 않음
-# closePort()
+if __name__ == "__main__":
+    print("Start reading gesture sensor... \n")
+    sendSkillStr('kup', 0.2)
+    try: 
+        while True:
+            read_GestureSensor()
+    except KeyboardInterrupt:
+        print("\n[KeyboardInterrupt] 측정을 중단합니다.")
 
+    finally:
+        # 포트 닫기
+        closePort()
 
 
 

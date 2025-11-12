@@ -40,29 +40,22 @@ autoConnect()
 # ==============================================================================
 # LED light 센서 예제
 
-sendSkillStr('ksit', 0.1)
-
-while True:
-    light1 = readAnalogValue(35)
-    light2 = readAnalogValue(34)
+def read_LEDlight(PIN_1, PIN_2):
+    light1 = readAnalogValue(PIN_1)
+    light2 = readAnalogValue(PIN_2)
 
     print("light1 = ", str(light1))
     print("light2 = ", str(light2))
 
-    time.sleep(0.5)
+if __name__ == "__main__":
+    print("Start reading LED light sensor... \n")
+    sendSkillStr('ksit', 0.1)
+    try:
+        while True:
+            read_LEDlight(35, 34)
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        print("\n[KeyboardInterrupt] 측정을 중단합니다.")
 
-# ==============================================================================
-# 대기 상태
-time.sleep(1) # 초 단위
-
-# ==============================================================================
-# 포트 닫기
-closePort()
-
-
-
-
-# ==============================================================================
-# 관련 함수 참고 
-# PetoiRobot/robot.py
-
+    finally:
+        closePort()

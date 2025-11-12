@@ -6,7 +6,7 @@ Summary: LangChain과 SQLite를 통한 대화 이력 관리 및 GPT 모델 연�
 Author: 유도연
 Created Date: 2025-10-27
 Last Modified: 2025-11-05
-    Commit Message: "데모 단계 완료: DB저장, LangChain 연결"
+    Commit Message: ""
 ==============================================================================
 Description
     - Petoi 로봇 강아지와의 대화를 위한 랭체인 기반 GPT 인터페이스 구현
@@ -693,4 +693,8 @@ if __name__ == "__main__":
             chat_memory=chat_memory,
             user_id=user_id
         )
+        
+        # 포트 닫기
+        closePort()
+        
         print(f"[SYSTEM] 세션 '{session_id}'의 대화가 SQLite DB에 저장되었습니다.")

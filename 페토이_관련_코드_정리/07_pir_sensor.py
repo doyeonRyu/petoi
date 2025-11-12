@@ -6,7 +6,7 @@ File: 7_pir_sensor.py
 Summary: PIR 모션 센서 측정 예제
 Author: 유도연
 Created Date: 2025-10-16
-Last Modified: 2025-10-16
+Last Modified: 2025-11-11
 
 ==============================================================================
 Description
@@ -43,19 +43,30 @@ autoConnect()
 # ==============================================================================
 # PIR 모션 센서 측정 예제
 
-sendSkillStr('kup', 0.2)
-while True:
-    val = readDigitalValue(34) # PIR 센서 핀 번호 34, 35 중 34
+def read_PIRSensor(PIN):
+    val = readDigitalValue(PIN) # PIR 센서 핀 번호 34, 35 중 34
+
     if val == 0:
-       print(val)
+        print(val)
     elif val == 1:
         print("사람 움직임 감지 혹은 터치 감지")
-    time.sleep(1)
 
-# ==============================================================================
-# 포트 닫기 # while문이라 쓰이지 않음
-# closePort()
+if __name__ == "__main__":
+    print("Start reading PIR sensor.. \n")
 
+    sendSkillStr('kup', 0.2)
+    try:
+        while True: 
+            read_PIRSensor(34) 
+            time.sleep(1)
+
+    except KeyboardInterrupt:
+        # Ctrl + C 입력 시 실행됨
+        print("\n[KeyboardInterrupt] 측정을 중단합니다.")
+
+    finally:
+        # 포트 닫기
+        closePort()
 
 
 

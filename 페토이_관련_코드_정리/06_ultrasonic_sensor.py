@@ -6,7 +6,7 @@ File: 6_ultrasonic_sensor.py
 Summary: 초음파 센서 측정 예제
 Author: 유도연
 Created Date: 2025-10-16
-Last Modified: 2025-10-16
+Last Modified: 2025-11-11
 
 ==============================================================================
 Description
@@ -36,8 +36,8 @@ autoConnect()
 # ==============================================================================
 # 초음파 센서 측정 예제
 
-while True:
-    result = readUltrasonicDistance(9, -1) # RX2: 9, TX2: 10, -1: same trigger
+def read_UltrasonicSensor(RX2, TX2):
+    result = readUltrasonicDistance(TX2, -1) # RX2: 9, TX2: 10, -1: same trigger
 
     # 튜플이면 첫 번째 값만 사용
     if isinstance(result, tuple):
@@ -45,13 +45,23 @@ while True:
     else:
         distance = float(result) 
 
-    print(f"The distance is: {distance:.2f}")
-    time.sleep(1)
+    return distance
 
-# ==============================================================================
-# 포트 닫기 # while문이라 쓰이지 않음
-# closePort()
+if __name__ == "__main__":
+    print("Start reading ultrasonic sensor.. \n")
 
+    try:
+        while True:
+            distance = read_UltrasonicSensor(9, 10) # RX2, TX2
+            print(f"The distance is: {distance:.2f}")
+            time.sleep(0.5)
+
+    except KeyboardInterrupt:
+        print("\n[KeyboardInterrupt] 측정을 중단합니다.")
+
+    finally:
+        # 포트 닫기
+        closePort()
 
 
 
