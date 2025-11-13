@@ -28,14 +28,6 @@ Note:
 
 from PetoiRobot import * # 기본 동작 정의 library
 
-# 자동으로 포트 연결하기 
-#    포트 정의하지 않아도 모든 포트 접근 -> 연결된 Petoi 포트로 연결됨
-autoConnect() 
-
-# Gyro 비활성화 
-#    동작 작동 시 방해받을 수 있음
-# deacGyro()
-
 # ==============================================================================
 # 더블 터치 센서 측정 예제
 
@@ -47,6 +39,14 @@ def read_DoubleTouchSensor(PIN_left, PIN_right):
     print(((str(left)) + "\t" + (str(right))))
 
 if __name__ == "__main__":
+    # 자동으로 포트 연결하기 
+    #    포트 정의하지 않아도 모든 포트 접근 -> 연결된 Petoi 포트로 연결됨
+    autoConnect() 
+
+    # Gyro 비활성화 
+    #    동작 작동 시 방해받을 수 있음
+    # deacGyro()
+
     print("Start double touch sensor... \n")
     sendSkillStr('ksit', 0.1)
 
