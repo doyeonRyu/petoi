@@ -1,7 +1,7 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리; 랭체인 기반 Petoi GPT
-File: 13_PetoiGPT_with_langChain.py
+Project: petoi basic code; 랭체인 기반 Petoi GPT
+File: n13_PetoiGPT_with_langChain.py
 Summary: 랭체인을 통한 대화 이력 관리 및 GPT 모델 연동 Petoi 구현
 Author: 유도연
 Created Date: 2025-10-27
@@ -462,10 +462,10 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     use_voice = (choice.strip() == "1")
 
     # 1) 명령어, 프로필 파일 불러오기 (절대 경로) # 사용자 경로로 수정
-    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Commands.json' 
+    command_path = 'C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\Commands.json' 
     command_content = load_commands(command_path)
     
-    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\bittle_profile.json" 
+    profile_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\bittle_profile.json" 
     profiles = load_profiles(profile_path) 
 
     # 2) 처음 부팅 시 사용자 이름 - 프로필 매칭을 위한 과정
@@ -506,7 +506,7 @@ if __name__ == "__main__": # 모듈 단독 실행 시만 동작
     # 기존 프로필이 존재할 때
     else: 
         # 대화 이력 불러오기 # 사용자 경로로 수정
-        chat_file = f"C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\logs\\{user_name}_history.json"
+        chat_file = f"C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\logs\\{user_name}_history.json"
         # 재부팅 시 이전 대화 복원
         load_chat_history(chat_file, memory)
 

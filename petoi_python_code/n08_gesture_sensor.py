@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 8_gesture_sensor.py
+File: n08_gesture_sensor.py
 Summary: 제스처 센서 측정 예제
 Author: 유도연
 Created Date: 2025-10-16

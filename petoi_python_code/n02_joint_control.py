@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 2_joint_control.py
+File: n02_joint_control.py
 Summary: 관절 하나씩 움직이기 예제 
 Author: 유도연
 Created Date: 2025-10-16

@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 11_ir_sensor.py
+File: n11_ir_sensor.py
 Summary: ir 센서 예제
 Author: 유도연
 Created Date: 2025-10-17
@@ -41,7 +41,6 @@ from PetoiRobot import * # 기본 동작 정의 library
 
 import time
 import math
-import random
 
 # ==============================================================================
 # LED light 센서 예제
@@ -73,11 +72,11 @@ def read_doubleIFDistance(SENSOR2, SENSOR1):
 if __name__ == "__main__":
     # 자동으로 포트 연결하기 
     #    포트 정의하지 않아도 모든 포트 접근 -> 연결된 Petoi 포트로 연결됨
-    # autoConnect()
+    autoConnect()
 
     # Gyro 비활성화 
     #    동작 작동 시 방해받을 수 있음
-    # deacGyro()
+    deacGyro()
 
     print("Start reading double IR distance... \n")
 

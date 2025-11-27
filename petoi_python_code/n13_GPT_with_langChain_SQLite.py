@@ -1,7 +1,7 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리; 랭체인 기반 Petoi GPT
-File: 13_PetoiGPT_with_langChain_SQLite.py
+Project: petoi basic code; 랭체인 기반 Petoi GPT
+File: n13_PetoiGPT_with_langChain_SQLite.py
 Summary: LangChain과 SQLite를 통한 대화 이력 관리 및 GPT 모델 연동 Petoi 구현
 Author: 유도연
 Created Date: 2025-10-27
@@ -583,7 +583,7 @@ if __name__ == "__main__":
         store = {} # { "session_id": InMemoryChatMessageHistory 객체, ... }
 
         # 2) 명령어 불러오기 # 사용자 경로로 수정
-        command_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Commands.json"
+        command_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\Commands.json"
         command_content = load_commands(command_path)
 
         # 3) 사용자 이름 확인
@@ -606,7 +606,7 @@ if __name__ == "__main__":
         )
 
         # 5) 프로필 불러오기 # 사용자 경로로 수정
-        DB_PATH = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\코드정리\\GPT_related\\Bittle.db"
+        DB_PATH = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\Bittle.db"
 
         # DB 로드 혹은 생성
         init_db(DB_PATH) 

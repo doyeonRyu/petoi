@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 3_speaker_demo.py
+File: n03_speaker_demo.py
 Summary: 스피커 출력 예제
 Author: 유도연
 Created Date: 2025-10-16

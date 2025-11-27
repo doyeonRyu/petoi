@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 7_pir_sensor.py
+File: n07_pir_sensor.py
 Summary: PIR 모션 센서 측정 예제
 Author: 유도연
 Created Date: 2025-10-16

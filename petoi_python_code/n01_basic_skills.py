@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 1_basic_skills.py
+File: n01_basic_skills.py
 Summary: 기본 정의된 동작 작동 예제
 Author: 유도연
 Created Date: 2025-10-15

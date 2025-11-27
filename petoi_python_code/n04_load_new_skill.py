@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 4_load_new_skill.py
+File: n04_load_new_skill.py
 Summary: 새롭게 추출한 스킬 불러오기 예제
 Author: 유도연
 Created Date: 2025-10-16

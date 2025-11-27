@@ -1,8 +1,8 @@
 """
 ==============================================================================
-Project: 페토이 기본 코드 정리
+Project: petoi basic code
 
-File: 5_execute_command.py
+File: n05_execute_command.py
 Summary: 직렬 명령 수행하기 예제
 Author: 유도연
 Created Date: 2025-10-16
