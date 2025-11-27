@@ -1,6 +1,6 @@
 /* 
 ==============================================================================
-Project: Ai vision 카메라 
+Project: petoi_arduino_code
 
 File: send_image_to_python.ino
 Summary: 카메라 객체 인식 결과를 python으로 보내 이미지 형태로 저장하는 코드 
