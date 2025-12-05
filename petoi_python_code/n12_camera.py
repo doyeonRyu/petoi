@@ -36,7 +36,7 @@ import serial
 import json
 import base64
 from datetime import datetime
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 
@@ -51,6 +51,31 @@ ser = serial.Serial('COM7', 115200, timeout=1)
 buf = "" # 데이터 버퍼
 capture = False # 프레임 캡쳐 상태 플래그
 
+# font = ImageFont.truetype("arial.ttf", 16)
+
+def draw_label(draw, x, y, w, text, bg_color, text_color="white", font=None):
+    # 폰트 기본값
+    if font is None:
+        font = ImageFont.load_default()
+
+    # 텍스트 크기 계산 
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    # 배경 박스 여백 설정
+    padding = 3
+    bg_x1 = x
+    bg_y1 = y - text_height - padding
+    bg_x2 = x + w
+    bg_y2 = y
+
+    # 배경 박스
+    draw.rectangle((bg_x1, bg_y1, bg_x2, bg_y2), fill=bg_color)
+
+    # 텍스트
+    draw.text((bg_x1 + padding, bg_y1 + 1), text, fill=text_color, font=font)
+    
 while True:
     # 시리얼 포트에서 한 줄 읽기
     line = ser.readline().decode(errors="ignore").strip()
@@ -87,20 +112,31 @@ while True:
 
             # box 시각화
             for b in boxes:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3] # 형식: 년월일_시분초_밀리초
-                x, y, w, h = b["x"], b["y"], b["w"], b["h"] # 박스 좌표 정보 
-                if gesture == 0: # 보자기
-                    draw.rectangle((x, y, x + w, y + h), outline="red", width=3)
-                    draw.text((x, y - 10), f"Paper:{b['score']}%", fill="red")
-                    filename = f"paper_{timestamp}.jpg"
-                elif gesture == 1: # 주먹
-                    draw.rectangle((x, y, x + w, y + h), outline="green", width=3)
-                    draw.text((x, y - 10), f"Rock:{b['score']}%", fill="green")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+                x, y, w, h = b["x"], b["y"], b["w"], b["h"]
+
+                score_text = f"{['Paper','Rock','Scissors'][gesture]}: {b['score']}%"
+
+                if gesture == 0:  # Paper
+                    color = "red"
+                    filename = f"Paper_{timestamp}.jpg"
+                    label_bg = (255, 0, 0, 180) # 빨강 배경
+                elif gesture == 1:  # Rock
+                    color = "green"
                     filename = f"Rock_{timestamp}.jpg"
-                elif gesture == 2: # 가위
-                    draw.rectangle((x, y, x + w, y + h), outline="blue", width=3)
-                    draw.text((x, y - 10), f"Scissors:{b['score']}%", fill="blue")
+                    label_bg = (0, 128, 0, 180) # 초록 배경
+                elif gesture == 2:  # Scissors
+                    color = "blue"
                     filename = f"Scissors_{timestamp}.jpg"
+                    label_bg = (0, 0, 255, 180) # 파랑 배경
+
+                # 박스
+                draw.rectangle((x, y, x + w, y + h), outline=color, width=3)
+
+                # 텍스트 + 배경 박스
+                draw_label(draw, x, y, w, score_text, bg_color=color, text_color="white")
+
+            # 이미지 저장
             img.save(os.path.join(save_dir, filename))
             print("saved:", filename)
 

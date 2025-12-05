@@ -20,6 +20,7 @@ Instruction
 ==============================================================================
 new skill이란?  
     - 데스크탑 앱 혹은 아두이노 등으로 새롭게 정의해 추출된 skill
+    - petoi desktop app skill composer에서 추출함
     - 저장 위치:    
         - C:/Users/USER/.config/Petoi/SkillLibrary/{모델 명}/
     - default: 

@@ -48,6 +48,7 @@ GPT
 Note:
     - 기존 OpenSource인 Basic_with_keyboard.py 파일을 랭체인 버전으로 변환
     - 대화 이력 관리 및 GPT 모델 연동 기능 고도화
+    - **이전 버전이므로 n13_GPT_with_langChain_SQLite.py 작동을 강력히 권장함**
 
 Limitations:
     - 현재 개발 과정이므로 STT, TTS, 실제 Petoi 동작은 주석 처리

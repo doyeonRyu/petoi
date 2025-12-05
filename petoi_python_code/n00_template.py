@@ -1,12 +1,12 @@
 """
 ==============================================================================
-Project: petoi basic code
+Project: petoi python code
 
-File: 00_code_setting.py
+File: 00_template.py
 Summary: 기본 템플릿 구성하기
 Author: 유도연
-Created Date: 2025-10-xx
-Last Modified: 2025-10-xx
+Created Date: 2025-xx-xx
+Last Modified: 2025-xx-xx
 
 ==============================================================================
 Description

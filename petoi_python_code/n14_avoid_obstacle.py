@@ -100,7 +100,7 @@ def avoidObstacle(SENSOR2, SENSOR1):
     print("[장애물 없음] 계속 직진합니다.")
     sendSkillStr("kwkF")
     return
-
+ 
 if __name__ == "__main__":
     # 자동으로 포트 연결하기 
     #    포트 정의하지 않아도 모든 포트 접근 -> 연결된 Petoi 포트로 연결됨
