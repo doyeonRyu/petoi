@@ -57,7 +57,6 @@ Note:
     - 대화 이력 관리 및 GPT 모델 연동 기능 고도화
 
 Limitations:
-    - 현재 개발 과정이므로 STT, TTS, 실제 Petoi 동작은 주석 처리
     - 프롬프트로 명령어 리스트 제공하므로 토큰 소비 큼
     - 메모리, 토큰 관리 필요
     - 감정 표현 등 기능 추가 예정
@@ -69,36 +68,28 @@ Limitations:
 # 1. 라이브러리 로드 
 # ============================================================================
 
-# 1) 랭체인 관련 라이브러리 로드 
-import langchain # LangChain 기본 라이브러리
-from langchain_openai import ChatOpenAI # OpenAI 모델 연동
-from langchain_core.prompts import (
-    ChatPromptTemplate, # 챗 프롬포트 템플릿
-    MessagesPlaceholder # 메시지 플레이스 홀더
-)
+# 랭체인 관련 라이브러리 로드 
+import langchain
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema import HumanMessage, AIMessage
-from langchain.chains import LLMChain
-from langchain_core.output_parsers import StrOutputParser # 출력 파서 (str 형식으로 출력)
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 
-# 대화 기록
-from langchain_core.runnables.history import RunnableWithMessageHistory # 대화 기록을 지원하는 런너블
-from langchain_core.chat_history import (
-    BaseChatMessageHistory, # 기본 대화 기록
-    InMemoryChatMessageHistory
-)
-from langchain.memory import ConversationBufferMemory
+# Petoi 관련 라이브러리
+from PetoiRobot import *
 
-# 2) Petoi 관련 라이브러리 로드
-from PetoiRobot import * # Petoi 로봇 제어
-
-# 3) 기타 라이브러리
+# 기타 라이브러리
 import os
-import sqlite3 # 데이터베이스 관련
+import sqlite3
+import re
+import time
 from datetime import datetime
-from dotenv import load_dotenv # .env 파일 로드
-import speech_recognition as sr # 음성 인식
-from Speech2Text import listen_and_transcribe # STT
-from Text2Speech import text_to_speech_stream # TTS
+from dotenv import load_dotenv
+import speech_recognition as sr
+from Speech2Text import listen_and_transcribe
+from Text2Speech import text_to_speech_stream
 
 
 
@@ -106,19 +97,36 @@ from Text2Speech import text_to_speech_stream # TTS
 # 2. 기본 환경 세팅
 # ============================================================================
 
-# 1) .env 파일에서 환경 변수 로드
+# 1) 설정 클래스
+class Config:
+    """
+    Class: Config
+        - 시스템 설정 값들을 관리하는 클래스
+    """
+    DB_PATH = "C:\\Users\\USER\\Desktop\\유도연\\03_petoi\\myCode\\GPT_related\\Bittle.db"
+    COMMAND_PATH = "C:\\Users\\USER\\Desktop\\유도연\\03_petoi\\myCode\\GPT_related\\Commands.json"
+    MODEL_NAME = "gpt-4o-mini"
+    TEMPERATURE = 0.7
+    MAX_TOKENS = 200
+    HISTORY_DAYS = 5
+
+# 2) .env 파일에서 환경 변수 로드
 load_dotenv() # API 불러오기
 
-# 2) OpenAI GPT-4o-mini 모델 초기화
+# 3) OpenAI GPT-4o-mini 모델 초기화
 model = ChatOpenAI(
-    model="gpt-4o-mini",
-    temperature=0.7, # 낮을수록 일관성이 높고, 높을수록 창의적
-    max_tokens=200, # 응답 길이 제한
+    model=Config.MODEL_NAME,
+    temperature=Config.TEMPERATURE, # 낮을수록 일관성이 높고, 높을수록 창의적
+    max_tokens=Config.MAX_TOKENS, # 응답 길이 제한
     # top_p= 0.9 # nucleus sampling 범위; 확률 임계값
 )
 
-# 3) Petoi 포트 연결 # 우선 생략
-autoConnect() # 자동 포트 연결 함수 호출
+# 4) Petoi 포트 연결
+try:
+    autoConnect() # 자동 포트 연결 함수 호출
+    print("[SYSTEM] Petoi 로봇 연결 성공")
+except Exception as e:
+    print(f"[WARNING] Petoi 로봇 연결 실패: {e}")
 
 
 
@@ -136,7 +144,7 @@ def load_commands(file_path: str) -> str:
         - json 파일값 (str)
     """ 
     if not os.path.exists(file_path): # 파일 존재 확인 
-        raise FileNotFoundError(f"Commands.json을 찾을 수 없습니다: {file_path}") # 경로 오류 시 예외 
+        raise FileNotFoundError(f"[WARNING] Commands.json을 찾을 수 없습니다: {file_path}") # 경로 오류 시 예외 
     with open(file_path, "r", encoding="utf-8") as f: # 파일 열기 
         # print("[load_commands 디버깅] json 파일을 성공적으로 불러왔습니다.")
         return f.read() # str로 불러오기
@@ -147,7 +155,36 @@ def load_commands(file_path: str) -> str:
 # 4. 메모리 저장소 구성
 # ============================================================================
 
-# 1) 데이터베이스 초기화 함수
+store = {} # 세션 ID별 대화 이력 저장소
+
+
+
+# 1) 대화 이력 반환 혹은 생성 함수
+def get_session_history(session_id: str) -> BaseChatMessageHistory:
+    """
+    Function: get_session_history
+        - 세션 ID에 해당하는 대화 기록을 반환하거나 새로 생성하는 함수
+        - 영구 저장이 하닌 채팅 중 임시로 대화 이력 저장
+    Parameters: 
+        - session_id: 세션 식별자 문자열
+    Returns: 
+        - store[session_id]
+            - 세션 ID에 해당하는 대화 기록이 없으면 새로 생성하여 반환
+            - 기존에 있으면 해당 기록 반환
+    """
+    # 세션이 store에 존재하지 않으면 새로 생성
+    if session_id not in store:
+        # 메모리에 임시 저장
+        store[session_id] = InMemoryChatMessageHistory() # 새로운 세션이면 새 이력 생성
+        # print(f"[get_session_history 디버깅] 새로운 세션 생성: {session_id}")
+    else: # 기존 세션이면 기존 세션 불러오기
+        pass
+
+    return store[session_id] 
+
+
+
+# 2) 데이터베이스 초기화 함수
 def init_db(path: str) -> None:
     """
     Function: init_db
@@ -177,7 +214,7 @@ def init_db(path: str) -> None:
     # 3. 테이블 생성
     # 3-1) PROFILE 테이블
     cur.execute("""
-    CREATE TABLE IF NOT EXISTS PROFILE (
+    CREATE TABLE IF NOT EXISTS PROFILE ( 
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         note TEXT
@@ -196,37 +233,23 @@ def init_db(path: str) -> None:
             FOREIGN KEY (user_id) REFERENCES USER_PROFILE(user_id)
         )
     """)
+    
+    # 인덱스 생성: user_id와 session_id로 빠른 조회 가능하도록
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chat_user_session 
+        ON CHAT_HISTORY(user_id, session_id, timestamp DESC)
+    """)
 
     # 4. 변경 사항 저장
     conn.commit()
     # 5. 연결 종료
     conn.close()
+    print("[SYSTEM] 데이터베이스 초기화 완료")
 
-# 2) 대화 이력 반환 혹은 생성 함수
-def get_session_history(session_id: str) -> BaseChatMessageHistory:
-    """
-    Function: get_session_history
-        - 세션 ID에 해당하는 대화 기록을 반환하거나 새로 생성하는 함수
-        - 영구 저장이 하닌 채팅 중 임시로 대화 이력 저장
-    Parameters: 
-        - session_id: 세션 식별자 문자열
-    Returns: 
-        - store[session_id]
-            - 세션 ID에 해당하는 대화 기록이 없으면 새로 생성하여 반환
-            - 기존에 있으면 해당 기록 반환
-    """
-    # 세션이 store에 존재하지 않으면 새로 생성
-    if session_id not in store:
-        # 메모리에 임시 저장
-        store[session_id] = InMemoryChatMessageHistory() # 새로운 세션이면 새 이력 생성
-        # print(f"[get_session_history 디버깅] 새로운 세션 생성: {session_id}")
-    else: # 기존 세션이면 기존 세션 불러오기
-        pass
 
-    return store[session_id] 
-    
+
 # 3) 새 대화 이력 저장
-def save_chat_history_to_db(path, session_id: str, chat_memory, user_id):
+def save_chat_history_to_db(path: str, session_id: str, user_id: int) -> None:
     '''
     Function: save_chat_history_to_db
         - 메모리(InMemoryChatMessageHistory 등)에 저장된 대화 이력을 SQLite DB로 저장하는 함수
@@ -239,33 +262,56 @@ def save_chat_history_to_db(path, session_id: str, chat_memory, user_id):
     Return:
         - None (DB에 저장만 수행)
     '''
-    # 1. DB 연결
-    conn = sqlite3.connect(path)
-    cur = conn.cursor()
+    try:
+        # 1. DB 연결
+        conn = sqlite3.connect(path)
+        cur = conn.cursor()
 
-    # 2. memory 객체 내 모든 메시지 순회
-    start_index = getattr(chat_memory, "last_loaded_count", 0)
-    new_messages = chat_memory.messages[start_index:]
-    for msg in new_messages:
-        role = "human" if msg.type == "human" else "Bittle"
-        content = msg.content
+        # 2. 해당 세션의 메모리 불러오기 
+        if session_id not in store: 
+            print(f"[WARNING] 세션 ID '{session_id}'에 해당하는 메모리가 없습니다. 저장할 대화 이력이 없습니다.")
+            return
 
-        # 3. DB에 삽입
+        session_memory = store[session_id]
+        
+        # 3. 이미 DB에 저장된 메시지 개수 확인
         cur.execute("""
-            INSERT INTO CHAT_HISTORY (user_id, session_id, role, content, timestamp)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, session_id, role, content, timestamp))
-
-    # 4. 커밋 및 종료
-    conn.commit()
-    conn.close()
+            SELECT COUNT(*) FROM CHAT_HISTORY 
+            WHERE session_id = ? AND user_id = ?
+        """, (session_id, user_id))
+        
+        saved_count = cur.fetchone()[0]
+        new_messages = session_memory.messages[saved_count:]
+        
+        # 4. 새 메시지 DB에 저장
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        for msg in new_messages:
+            role = "human" if msg.type == "human" else "Bittle"
+            content = msg.content
+            
+            cur.execute("""
+                INSERT INTO CHAT_HISTORY (user_id, session_id, role, content, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, session_id, role, content, timestamp))
+        
+        conn.commit()
+        print(f"[SYSTEM] {len(new_messages)}건의 새 대화가 저장되었습니다.")
+        
+    except sqlite3.Error as e:
+        print(f"[ERROR] DB 저장 실패: {e}")
+        if conn:
+            conn.rollback() # 오류 시 롤백
+    finally:
+        if conn:
+            conn.close() # 연결 종료 
 
 
 
 # ============================================================================
 # 5. PROFILE 테이블에서 ID에 해당하는 사용자 프로필 로드 혹은 생성 함수 
 # ============================================================================
-def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, chat_memory):
+def get_profile_by_ID(path: str, user_id: int, user_name: str, model, session_id: str, use_voice: bool) -> tuple[dict, dict]:
     """
     Function: get_profile_by_ID
         - PROFILE 테이블에서 입력받은 ID 존재 여부 확인
@@ -274,6 +320,7 @@ def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, cha
     Parameters: 
         - path (str): 사용자 DB 로드 
         - user_id (int): 처음 부팅 시 입력한 id와 name 중 id
+        - user_name (str): 처음 부팅 시 입력한 id와 name 중 name
         - model
         - session_id
         - use_voice (bool)
@@ -317,17 +364,17 @@ def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, cha
 
         # 로드한 대화 이력 메모리에 로드 
         if chat_history:
-            print(f"[SYSTEM] 최근 5일 이내 대화 {len(chat_history)}건을 memory에 복원합니다.")
+            session_memory = get_session_history(session_id)
+            print(f"[SYSTEM] 최근 30일 이내 대화 {len(chat_history)}건을 memory에 복원합니다.")
+            
             for msg in chat_history:
                 if msg["role"] == "human":
-                    chat_memory.add_user_message(msg["content"])
+                    session_memory.add_user_message(msg["content"])
                 elif msg["role"] == "Bittle":
-                    chat_memory.add_ai_message(msg["content"])
+                    session_memory.add_ai_message(msg["content"])
+        
 
         print(f"[SYSTEM] CHAT_HISTORY {len(chat_history)}건 로드 완료.")
-        
-        # 대화 이력 DB에 저장 시 새로 생성된 메모리만 저장되기 위함
-        object.__setattr__(chat_memory, "last_loaded_count", len(chat_memory.messages))
 
         # 연결 종료
         conn.close()
@@ -344,7 +391,7 @@ def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, cha
         if new_profile:
             name = new_profile.get("name")
             note = " / ".join(new_profile.get("notes", [])) if isinstance(new_profile.get("notes"), list) else new_profile.get("notes", "")
-
+            
             # PROFILE 테이블에 삽입
             cur.execute("""
                 INSERT INTO PROFILE (name, note)
@@ -352,12 +399,10 @@ def get_profile_by_ID(path: str, user_id: int, model, session_id, use_voice, cha
             """, (name, note))
             conn.commit()
             
-            # 새 사용자의 ID 반환하기 
             new_id = cur.lastrowid
-
-            system_msg = "새 프로필이 저장되었습니다."
-            print(f"[SYSTEM] {system_msg} (ID: {new_id}, Name: {name})")
-            # text_to_speech_stream(system_msg)
+            
+            system_msg = f"새 프로필이 저장되었습니다. (ID: {new_id}, Name: {name})"
+            print(f"[SYSTEM] {system_msg}")
             
             user_profile = {"user_id": new_id, "user_name": name, "note": note}
             conn.close()
@@ -464,14 +509,14 @@ def greet_command(model, profile):
     return greet
 
 
+
 # ============================================================================
 # 7. 시스템 프롬프트 및 대화 체인 생성 함수
 # ============================================================================
 def build_chat_chain(
         model, 
         session_id: str, 
-        get_session_history, 
-        memory, 
+        command_content: str,
         profile: dict | None = None, 
         chat_history: dict | None = None
     ) -> RunnableWithMessageHistory:
@@ -482,8 +527,7 @@ def build_chat_chain(
     Parameters:
         - model: GPT 모델
         - session_id (str): 특정 세션을 구분하기 위한 고유 ID
-        - get_session_history: session_id를 받아 대화 이력 반환 함수
-        - memory: 대화 이력 임시 저장을 위한 메모리 변수 (ConversationBufferMemory 객체)
+        - command_content (str): Commands.json 파일 내용
         - profile (dict): 사용자 프로필 프롬프트에 넣기
         - chat_history (dict): 사용자 대화 이력 프롬프트에 넣기
     Return:
@@ -491,20 +535,13 @@ def build_chat_chain(
     """
     # 1) 프로필, 대화 이력 자동 로드 후 프롬프트에 반영
     if profile:
-        name = profile.get("user_name")
+        name = profile.get("user_name", "사용자")
         note = profile.get("note", "")
         note_text = note if note else "등록된 특징 없음"
         profile_text = f"지금 대화 중인 사람은 '{name}'이며, 특징: {note_text}"
     else:
+        name = "사용자"
         profile_text = "지금 대화 중인 사람은 기본 사용자이며, 아직 등록된 프로필이 없습니다."
-
-    preloaded_messages = []
-    if chat_history:
-        for msg in chat_history:
-            if msg["role"] == "human":
-                preloaded_messages.append(HumanMessage(content=msg["content"]))
-            elif msg["role"] == "ai":
-                preloaded_messages.append(AIMessage(content=msg["content"]))
 
     # 2) 대화 프롬프트 구성
     prompt = ChatPromptTemplate.from_messages(
@@ -519,18 +556,19 @@ def build_chat_chain(
                 "   - 반드시 두 부분으로 대답해야 해: "
                 "     (1) 로봇 강아지로서 짧고 친근한 한국어 대화 문장 "
                 "     (2) JSON 파일에 맞는 올바른 명령어를 ##명령어## 형식으로 출력 "
-                "   - 예: '야, 점프하자' -> '물론이야! 나 점프하는 거 정말 좋아해. The relevant command is:##ksit##' "
+                "   - 예: '야, 점프하자' -> '물론이야! 나 점프하는 거 정말 좋아해. 관련된 명령어:##ksit##' "
                 "2) 내가 로봇 동작과 무관한 질문(예: 일반 지식, 날씨, 잡담, 수학 문제 등)을 하면, "
                 "   - 그냥 네가 아는 지식이나 대화로 한국어로 자연스럽게 답해. "
                 "   - 이 경우에는 절대 명령어를 출력하지 마. "
                 "즉, 로봇 명령일 때만 ##명령어##를 포함하고, 그 외에는 지식과 대화를 통해 답해야 해."
-                "I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. The relevant command is:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
-                "Here is your command set:\n{command_content}\n\n"
-                "현재 대화 중인 사람은 '{profile_text}'이며, 이 사용자의 이름: '{user_name}'."
-                "항상 사용자 이름을 기억하고 사용자를 부를 때나 자연스러운 대화에서 이름을 사용해"),
+                "I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. 관련된 명령어:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
+                "**명령어 목록:**\n{command_content}\n\n"
+                "**사용자 정보:**\n{profile_text}\n"
+                "항상 사용자 이름 '{user_name}'을 기억하고 자연스럽게 대화에 사용해."),
             MessagesPlaceholder(variable_name="history"), # 과거 대화 이력 자리표시자
             ("human", "{user_input}") # 현재 사용자 입력 자리
-    ])
+    ]) # 영어: Opensource PetoiBittleChatGPT 원문
+
     filled_prompt = prompt.partial(
         command_content=command_content, 
         profile_text=profile_text,
@@ -538,12 +576,7 @@ def build_chat_chain(
     )
 
     # 4) memory와 함께 LLMChain 구성
-    chain = LLMChain(
-        llm=model,
-        prompt=filled_prompt,
-        memory=memory,
-        verbose=False
-    )
+    chain = filled_prompt | model | StrOutputParser()
     
     # 5) RunnableWithMessageHistory로 래핑
     chain_with_memory = RunnableWithMessageHistory(
@@ -553,22 +586,45 @@ def build_chat_chain(
         history_messages_key="history" # 프롬프트 내 메시지 변수명
     )
 
-    # 6) 대화 이력 임시 저장
-    memory = get_session_history(session_id)
-
-    # 프로필을 시스템 메시지로 한 번만 기록
-    if profile_text:
-        memory.add_message(AIMessage(content=f"[SYSTEM_PROFILE] {profile_text}"))
-
-    # 과거 대화 복원
-    for msg in preloaded_messages:
-        memory.add_message(msg)
+    # 6)프로필 정보를 시스템 메시지로 추가
+    session_memory = get_session_history(session_id)
+    existing_contents = [msg.content for msg in session_memory.messages]
+    profile_msg = f"[SYSTEM] {profile_text}"
+    
+    if profile_msg not in existing_contents:
+        session_memory.add_message(AIMessage(content=profile_msg))
+    
     return chain_with_memory
 
 
 
 # ============================================================================
-# 8. main 함수 
+# 8. 로봇 명령 실행 함수
+# ============================================================================
+
+def send_robot_command(command: str):
+    """
+    Function: send_robot_command
+        - Petoi 로봇에 명령어 전송
+    Parameters: 
+        - command (str): 전송할 명령어
+    Return: None
+    """
+    try:
+        if 'goodPorts' in globals():
+            task = [command, 1]
+            send(goodPorts, task)
+            time.sleep(1)
+            print(f"[SYSTEM] 명령 전송 완료: {command}")
+        else:
+            print("[WARNING] 로봇 포트가 연결되지 않았습니다.")
+    except Exception as e:
+        print(f"[ERROR] 명령 전송 실패: {e}")
+
+
+
+# ============================================================================
+# 9. main 함수 
 # ============================================================================
 if __name__ == "__main__":
     try:
@@ -579,122 +635,123 @@ if __name__ == "__main__":
         choice = input("번호 입력 (1 or 2): ")
         use_voice = (choice.strip() == "1")
 
-        # 1) 세션별 대화 기록 저장소 (RAM 상의 임시 메모리)
-        store = {} # { "session_id": InMemoryChatMessageHistory 객체, ... }
+        # 1) 명령어 불러오기 # 사용자 경로로 수정
+        command_content = load_commands(Config.COMMAND_PATH)
+        print("[SYSTEM] 명령어 파일 로드 완료")
 
-        # 2) 명령어 불러오기 # 사용자 경로로 수정
-        command_path = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\Commands.json"
-        command_content = load_commands(command_path)
+        # 2) 데이터베이스 초기화
+        init_db(Config.DB_PATH)
 
         # 3) 사용자 이름 확인
+        print("\n" + "=" * 50)
         system_msg = "안녕! 너의 ID와 이름이 뭐야?"
         print(f"[SYSTEM] {system_msg}")
-        user_id = listen_and_transcribe() if use_voice else input("[사용자 ID] ").strip()
-        user_name = listen_and_transcribe() if use_voice else input("[사용자 이름] ").strip()
+
+        if use_voice:
+            print("[SYSTEM] ID를 말해주세요...")
+            user_id = int(listen_and_transcribe())
+            print("[SYSTEM] 이름을 말해주세요...")
+            user_name = listen_and_transcribe()
+        else:
+            user_id = int(input("[사용자 ID] ").strip())
+            user_name = input("[사용자 이름] ").strip()
 
         # 4) 세션 ID, 메모리 구성
         timestamp = datetime.now().strftime("%Y-%m-%d")
-        session_id = f"{user_name}_{timestamp}" # 부팅 + 대화 동일 세션에 저장되도록 구성
-        config = {"configurable": {"session_id": session_id}} 
+        session_id = f"{user_name}_{timestamp}"
         
-        # 메모리 생성
-        chat_memory = InMemoryChatMessageHistory()
-        memory = ConversationBufferMemory(
-            memory_key="history", # LLMChain이 prompt에 넣는 key
-            chat_memory=chat_memory, # 실제 대화 기록이 저장되는 객체
-            return_messages=True # message 객체 그대로 반환
+        # 5) 프로필 로드 또는 생성
+        user_profile, chat_history = get_profile_by_ID(
+            Config.DB_PATH, 
+            user_id, 
+            user_name, 
+            model, 
+            session_id, 
+            use_voice
         )
 
-        # 5) 프로필 불러오기 # 사용자 경로로 수정
-        DB_PATH = "C:\\Users\\USER\\Desktop\\유도연\\petoi\\myCode\\GPT_related\\Bittle.db"
-
-        # DB 로드 혹은 생성
-        init_db(DB_PATH) 
-        # 사용자 프로필, 대화 이력 불러오기
-        user_profile, chat_history = get_profile_by_ID(DB_PATH, user_id, model, session_id, use_voice, chat_memory)
-
         # 6) 대화 체인 구성
-        chain = build_chat_chain(model, session_id, get_session_history, memory, user_profile, chat_history)
-
-        print("[SYSTEM] 대화를 시작합니다. '종료'라고 말하면 언제든 끝낼 수 있습니다.")
-
+        chain = build_chat_chain(model, session_id, command_content, user_profile)
+        
         # 7) 인삿말 출력
+        print("\n" + "=" * 50)
         greet = greet_command(model, user_profile)
+        print(f"[Bittle] {greet}")
         # text_to_speech_stream(greet)
-        print("[command]", greet)
-
+        
         # 인사 명령 (필요 시 주석 해제)
-        dogcommand = "khi"
-        print("[dogcommand]", dogcommand)
-        task = [dogcommand, 1]
-        send(goodPorts, task)
+        send_robot_command("khi")
 
         # =================================================================
         # 메인 대화 루프
         # =================================================================
+        print("[SYSTEM] 대화를 시작합니다. '종료'라고 말하면 언제든 끝낼 수 있습니다.")
+        print("=" * 50 + "\n")
+
         while True:
             # 사용자 입력
             if use_voice:
-                user_input = listen_and_transcribe() # STT로 부터 입력 텍스트로 전환
+                print("[SYSTEM] 듣고 있습니다...")
+                user_input = listen_and_transcribe()
             else:
                 user_input = input("[사용자] ")
-
+            
             if not user_input.strip():
                 continue
 
-            # 메모리에 추가
-            # memory.add_user_message(user_input)
-
+            # 종료 명령 확인
+            if user_input.strip() in ["종료", "끝", "exit", "quit"]:
+                print("[SYSTEM] 대화를 종료합니다...")
+                break
+            
             # GPT 응답
             response = chain.invoke({"user_input": user_input}, config={"configurable": {"session_id": session_id}})
-            if isinstance(response, dict):
-                response = response.get("text", "")
-            # memory.add_ai_message(response)
 
             # 명령어 추출
-            command = response
-            if "The relevant command is:" in command:
-                parts = command.split("The relevant command is:")
+            if "관련된 명령어:" in response:
+                parts = response.split("관련된 명령어:")
                 description = parts[0].strip()
-                match = re.search(r"##(.*?)##", command)
+                
+                match = re.search(r"##(.*?)##", response)
                 dogcommand = match.group(1).strip() if match else None
-
-                print("[command]", description)
+                
+                print(f"[Bittle] {description}")
                 # text_to_speech_stream(description)
+                
                 if dogcommand:
-                    print("[dogcommand]", dogcommand)
                     dogcommand = dogcommand.replace(".", "").strip()
-
-                    # 명령 실행 (필요 시 주석 해제)
-                    task = [dogcommand, 1]
-                    send(goodPorts, task)
-                    time.sleep(1)
-
-                    # 기본 자세 복귀 (필요 시 주석 해제)
-                    # task = ["ksit", 1]
-                    # send(goodPorts, task) or send
+                    print(f"[명령어] {dogcommand}")
+                    send_robot_command(dogcommand)
                 else:
-                    warning = "명령어 태그를 찾지 못했습니다."
-                    print(f"[SYSTEM] {warning}")
-                    # text_to_speech_stream(warning)
+                    print("[WARNING] 명령어 태그를 찾지 못했습니다.")
             else:
-                description = command.strip().replace("The relevant command is:", "")
-                print("[command]", description)
+                description = response.strip()
+                print(f"[Bittle] {description}")
                 # text_to_speech_stream(description)
 
     except KeyboardInterrupt:
-        print("\n[SYSTEM] 대화를 저장하고 종료합니다...")
-
+        print("\n[SYSTEM] Ctrl+C 감지 - 대화를 저장하고 종료합니다...")
+    
+    except Exception as e:
+        print(f"[ERROR] 예상치 못한 오류 발생: {e}")
+        import traceback
+        traceback.print_exc()
+    
     finally:
         # 종료 시 대화 저장
+        print("\n[SYSTEM] 대화 이력을 저장 중...")
         save_chat_history_to_db(
-            path=DB_PATH,
+            path=Config.DB_PATH,
             session_id=session_id,
-            chat_memory=chat_memory,
             user_id=user_id
         )
         
         # 포트 닫기
-        closePort()
+        try:
+            closePort()
+            print("[SYSTEM] 로봇 포트 연결 종료")
+        except:
+            pass
         
-        print(f"[SYSTEM] 세션 '{session_id}'의 대화가 SQLite DB에 저장되었습니다.")
+        print(f"[SYSTEM] 세션 '{session_id}'의 모든 작업이 완료되었습니다.")
+        print("=" * 50)
