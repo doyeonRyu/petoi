@@ -1,28 +1,25 @@
 import speech_recognition as sr
-from Text2Speech import text_to_speech_stream
 
 def listen_and_transcribe():
-    recognizer = sr.Recognizer() # Recognizer 객체 생성
-    microphone = sr.Microphone() # Microphone 객체 생성
+    recognizer = sr.Recognizer()
+    microphone = sr.Microphone()
 
-    # 마이크로부터 오디오 캡처
     with microphone as source:
-        print("Talk...")
-        # 마이크로부터 오디오 캡처
         recognizer.adjust_for_ambient_noise(source)
         audio = recognizer.listen(source)
 
     try:
-        # Google의 음성 인식 API를 사용하여 음성을 텍스트로 변환
         text = recognizer.recognize_google(audio, language='ko-KR')
+        print(f"{text}")
         return text
+
     except sr.UnknownValueError:
-        text="Sory I could not understand audio."
-        return text
+        # 음성을 이해하지 못했을 때 안내 메시지
+        print("[SYSTEM] 음성을 인식하지 못했습니다. 다시 시도해주세요.")
+        return ""
     except sr.RequestError:
-        print("Servise was not found")
+        print("[SYSTEM] 서비스에 연결할 수 없습니다.")
+        return ""
 
 if __name__ == "__main__":
     listen_and_transcribe()
-
-

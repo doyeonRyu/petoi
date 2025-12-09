@@ -284,11 +284,11 @@ def save_chat_history_to_db(path: str, session_id: str, user_id: int) -> None:
         new_messages = session_memory.messages[saved_count:]
         
         # 4. 새 메시지 DB에 저장
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         for msg in new_messages:
             role = "human" if msg.type == "human" else "Bittle"
             content = msg.content
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             cur.execute("""
                 INSERT INTO CHAT_HISTORY (user_id, session_id, role, content, timestamp)
@@ -560,7 +560,7 @@ def build_chat_chain(
                 "2) 내가 로봇 동작과 무관한 질문(예: 일반 지식, 날씨, 잡담, 수학 문제 등)을 하면, "
                 "   - 그냥 네가 아는 지식이나 대화로 한국어로 자연스럽게 답해. "
                 "   - 이 경우에는 절대 명령어를 출력하지 마. "
-                "즉, 로봇 명령일 때만 ##명령어##를 포함하고, 그 외에는 지식과 대화를 통해 답해야 해."
+                "즉, 로봇 명령일 때만 ##명령어##를 포함하고, 그 외에는 지식과 대화를 통해 답해야 해. 대화 시 이모티콘은 포함하지마."
                 "I will tell some sentences to this robot and you will answer me as a robot dog. Your name is Bittle. You will respond to my words as a robot dog and you will translate what I give as a sentence into the appropriate command according to the command set we have and give me the string command expression. I will give you the command list as json. Here I want you to talk to me and say the command that is appropriate for this file. On the one hand, you will tell me the correct command and on the other hand, you will say a sentence to chat with me. For example, when I say 'dude, let's jump', you will respond like 'of course I love jumping. 관련된 명령어:##ksit##'. Not in any other format. Write the command you find in the list as ##command##. For example, ##ksit## With normal talking you don't have to do same movement like 'khi' you can do anything you want."
                 "**명령어 목록:**\n{command_content}\n\n"
                 "**사용자 정보:**\n{profile_text}\n"
@@ -642,19 +642,13 @@ if __name__ == "__main__":
         # 2) 데이터베이스 초기화
         init_db(Config.DB_PATH)
 
-        # 3) 사용자 이름 확인
+        # 3) 사용자 이름 확인 # ID를 숫자로 받아야 해서 정보 확인은 텍스트로 진행
         print("\n" + "=" * 50)
         system_msg = "안녕! 너의 ID와 이름이 뭐야?"
         print(f"[SYSTEM] {system_msg}")
-
-        if use_voice:
-            print("[SYSTEM] ID를 말해주세요...")
-            user_id = int(listen_and_transcribe())
-            print("[SYSTEM] 이름을 말해주세요...")
-            user_name = listen_and_transcribe()
-        else:
-            user_id = int(input("[사용자 ID] ").strip())
-            user_name = input("[사용자 이름] ").strip()
+        
+        user_id = int(input("[사용자 ID] ").strip())
+        user_name = input("[사용자 이름] ").strip()
 
         # 4) 세션 ID, 메모리 구성
         timestamp = datetime.now().strftime("%Y-%m-%d")
@@ -716,7 +710,7 @@ if __name__ == "__main__":
                 dogcommand = match.group(1).strip() if match else None
                 
                 print(f"[Bittle] {description}")
-                # text_to_speech_stream(description)
+                text_to_speech_stream(description)
                 
                 if dogcommand:
                     dogcommand = dogcommand.replace(".", "").strip()
@@ -727,7 +721,7 @@ if __name__ == "__main__":
             else:
                 description = response.strip()
                 print(f"[Bittle] {description}")
-                # text_to_speech_stream(description)
+                text_to_speech_stream(description)
 
     except KeyboardInterrupt:
         print("\n[SYSTEM] Ctrl+C 감지 - 대화를 저장하고 종료합니다...")
